@@ -214,7 +214,7 @@ def clone_voice(self: TTSTask, voice_profile_id: str) -> dict:
             name=profile.name,
         )
 
-        profile.metadata = metadata
+        profile.extra_info = metadata
         if "embedding_path" in metadata:
             profile.embedding_path = metadata["embedding_path"]
         db.commit()

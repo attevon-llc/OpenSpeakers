@@ -31,7 +31,8 @@ RUN pip install --no-cache-dir \
     --index-url https://download.pytorch.org/whl/cu124
 
 # ── Kokoro TTS (82M — fast, < 1 GB VRAM, preset voices) ─────────────────────
-RUN pip install --no-cache-dir "kokoro>=0.9.2"
+RUN pip install --no-cache-dir "kokoro>=0.9.2" && \
+    python -m spacy download en_core_web_sm
 
 # ── Transformers stack (VibeVoice, Qwen3) ────────────────────────────────────
 RUN pip install --no-cache-dir \
