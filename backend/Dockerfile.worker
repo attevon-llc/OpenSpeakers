@@ -1,0 +1,47 @@
+# open_speakers worker — ML inference container
+# Extends the base backend with PyTorch + TTS model dependencies.
+# Built separately so the API container stays lean.
+
+FROM python:3.12-slim AS base
+
+# Non-root user (UID 1000 matches host volume ownership convention)
+RUN groupadd -g 1000 appuser && useradd -u 1000 -g 1000 -m appuser
+
+WORKDIR /app
+
+# System deps: psycopg2, soundfile, ffmpeg, espeak-ng (for Kokoro phonemisation)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    libsndfile1 \
+    ffmpeg \
+    curl \
+    espeak-ng \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Python base deps (same as API container) ─────────────────────────────────
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ── PyTorch with CUDA 12.4 ───────────────────────────────────────────────────
+# CUDA 12.4 wheels are compatible with NVIDIA driver 13.0 on this machine.
+RUN pip install --no-cache-dir \
+    torch \
+    torchaudio \
+    --index-url https://download.pytorch.org/whl/cu124
+
+# ── Kokoro TTS (82M — fast, < 1 GB VRAM, preset voices) ─────────────────────
+RUN pip install --no-cache-dir "kokoro>=0.9.2"
+
+# ── Transformers stack (VibeVoice, Qwen3) ────────────────────────────────────
+RUN pip install --no-cache-dir \
+    transformers>=4.45.0 \
+    accelerate>=0.30.0 \
+    sentencepiece>=0.2.0
+
+# ── Application code ─────────────────────────────────────────────────────────
+COPY . .
+
+RUN mkdir -p /app/audio_output && chown -R appuser:appuser /app/audio_output
+
+USER appuser

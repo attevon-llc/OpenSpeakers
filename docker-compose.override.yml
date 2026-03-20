@@ -14,10 +14,10 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 
   worker:
-    image: open_speakers-backend:latest
+    image: open_speakers-worker:latest
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.worker
     volumes:
       - ./backend:/app
       - ${MODEL_CACHE_DIR:-./models}/huggingface:/home/appuser/.cache/huggingface
