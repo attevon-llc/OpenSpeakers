@@ -1,0 +1,37 @@
+# open-speakers model registry
+# Edit this file to add, disable, or override models.
+# Changes take effect on worker restart (models are loaded lazily).
+
+models:
+  vibevoice:
+    enabled: true
+    class: app.models.vibevoice.VibeVoiceModel
+    hf_repo: microsoft/VibeVoice-Realtime-0.5B
+    vram_gb: 4.5
+    priority: 1  # lower = preferred default model
+    description: Microsoft VibeVoice real-time TTS with voice cloning
+
+  fish-speech-s2:
+    enabled: true
+    class: app.models.fish_speech.FishSpeechModel
+    hf_repo: fishaudio/fish-speech-1.5
+    vram_gb: 5.0
+    priority: 2
+    description: Fish Audio Fish Speech S2 — zero-shot voice cloning
+    license: NC  # Non-commercial — ensure compliance before deployment
+
+  kokoro:
+    enabled: true
+    class: app.models.kokoro.KokoroModel
+    hf_repo: hexgrad/Kokoro-82M
+    vram_gb: 0.5
+    priority: 3
+    description: Kokoro 82M — fast, lightweight, 50+ preset voices
+
+  qwen3-tts:
+    enabled: false  # Enable in Phase 2
+    class: app.models.qwen3_tts.Qwen3TTSModel
+    hf_repo: Qwen/Qwen3-TTS
+    vram_gb: 10.0
+    priority: 4
+    description: Qwen3 TTS — large multilingual model

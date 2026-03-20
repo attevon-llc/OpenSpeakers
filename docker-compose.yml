@@ -1,0 +1,129 @@
+# open-speakers Base Configuration
+# This file contains common configuration for all environments
+#
+# Usage:
+#   Development:  docker compose up  (auto-loads docker-compose.override.yml)
+#   Production:   docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+#   GPU overlay:  docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gpu.yml up
+
+services:
+  postgres:
+    container_name: open-speakers-postgres
+    image: postgres:17.5-alpine
+    restart: always
+    env_file: .env
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-openspeakers}
+      - POSTGRES_USER=${POSTGRES_USER:-openspeakers}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-openspeakers}
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openspeakers}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: open-speakers-redis
+    image: redis:8.2.2-alpine3.22
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    container_name: open-speakers-backend
+    restart: always
+    env_file: .env
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUDIO_OUTPUT_DIR=/app/audio_output
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    container_name: open-speakers-worker
+    restart: always
+    env_file: .env
+    security_opt:
+      - no-new-privileges:true
+    # concurrency=1: only ONE generation at a time to prevent GPU memory contention
+    # max-tasks-per-child=1000: keep worker alive across many requests
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info
+      -Q tts
+      --pool=threads
+      --concurrency=1
+      --max-tasks-per-child=1000
+      --hostname tts-worker@%h
+      -E
+    volumes:
+      - ${MODEL_CACHE_DIR:-./models}/huggingface:/home/appuser/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./models}/torch:/home/appuser/.cache/torch
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUDIO_OUTPUT_DIR=/app/audio_output
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery inspect ping -d tts-worker@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    container_name: open-speakers-frontend
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    driver: bridge

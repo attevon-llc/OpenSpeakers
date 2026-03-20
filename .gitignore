@@ -1,0 +1,56 @@
+# Environment
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Node / Frontend
+node_modules/
+frontend/build/
+frontend/.svelte-kit/
+frontend/dist/
+
+# Docker volumes (don't commit model weights or generated audio)
+models/
+audio_output/
+
+# Database
+*.sqlite
+*.db
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Alembic
+# (keep versions/, but not the generated env.py if auto-generated)
+
+# Test artifacts
+.coverage
+htmlcov/
+coverage.xml

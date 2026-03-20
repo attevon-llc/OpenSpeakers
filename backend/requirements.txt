@@ -1,0 +1,56 @@
+# Web framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+websockets>=12.0
+
+# Database
+sqlalchemy>=2.0.30
+alembic>=1.13.0
+psycopg2-binary>=2.9.9
+
+# Validation
+pydantic>=2.6.0
+pydantic-settings>=2.3.0
+
+# Task queue + real-time progress via Redis pub/sub
+celery>=5.4.0
+redis[asyncio]>=5.0.0
+
+# HTTP
+httpx>=0.27.0
+
+# Audio processing
+soundfile>=0.12.1
+numpy>=1.26.0
+
+# Utilities
+python-dotenv>=1.0.0
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+httpx>=0.27.0  # for TestClient async
+
+# Linting / formatting (dev)
+ruff>=0.4.0
+
+# ─── ML stack (worker container only) ────────────────────────────────────────
+# These are installed in the worker Dockerfile — NOT the API container.
+# Listed here for documentation; comment out if building a lean API image.
+#
+# torch>=2.3.0            (install from pytorch.org wheels for CUDA version)
+# torchaudio>=2.3.0
+# transformers>=4.45.0
+# accelerate>=0.30.0
+#
+# VibeVoice (from David's fork):
+#   pip install -e /mnt/nvm/repos/VibeVoice
+#   OR: pip install git+https://github.com/microsoft/VibeVoice.git
+#
+# Fish Speech S2 (NC license):
+#   pip install fish-speech
+#   OR from source: git clone https://github.com/fishaudio/fish-speech && pip install -e .
+#
+# Kokoro:
+#   pip install kokoro soundfile
