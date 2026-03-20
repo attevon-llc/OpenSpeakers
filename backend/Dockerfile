@@ -1,4 +1,4 @@
-# open-speakers backend
+# open_speakers backend
 # Multi-stage build: API-only image by default.
 # The worker uses the same image but installs ML deps at runtime via MODEL_INSTALL.
 
