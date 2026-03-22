@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 from pathlib import Path
 
 import numpy as np
@@ -64,11 +65,37 @@ class VibeVoice1p5BModel(TTSModelBase):
         logger.info("Loading VibeVoice 1.5B from %s on %s", model_path, device)
 
         self._processor = VibeVoiceProcessor.from_pretrained(model_path)
-        self._model = VibeVoiceForConditionalGenerationInference.from_pretrained_hf(
-            model_path,
-            device=device,
-            torch_dtype=torch.bfloat16,
-        )
+
+        # Determine dtype and attention implementation based on device
+        if device == "cuda":
+            load_dtype = torch.bfloat16
+            attn_impl = "flash_attention_2"
+        else:
+            load_dtype = torch.float32
+            attn_impl = "sdpa"
+
+        try:
+            self._model = VibeVoiceForConditionalGenerationInference.from_pretrained_hf(
+                model_path,
+                device=device,
+                torch_dtype=load_dtype,
+                attn_implementation=attn_impl,
+            )
+        except Exception:
+            if attn_impl == "flash_attention_2":
+                logger.warning(
+                    "flash_attention_2 failed, falling back to sdpa "
+                    "(may have slightly lower audio quality)"
+                )
+                self._model = VibeVoiceForConditionalGenerationInference.from_pretrained_hf(
+                    model_path,
+                    device=device,
+                    torch_dtype=load_dtype,
+                    attn_implementation="sdpa",
+                )
+            else:
+                raise
+
         self._model.eval()
         self._model.set_ddpm_inference_steps(num_steps=20)
         self._loaded = True
@@ -93,26 +120,28 @@ class VibeVoice1p5BModel(TTSModelBase):
             raise RuntimeError("VibeVoice 1.5B model is not loaded")
 
         # Format text as speaker-labelled (required by the 1.5B model)
-        text = f"Speaker 0: {request.text}"
+        # Only add prefix if the text doesn't already have one
+        if re.search(r"Speaker\s*\d+\s*:", request.text):
+            text = request.text
+        else:
+            text = f"Speaker 0: {request.text}"
 
         # Prepare voice samples for cloning if a voice profile is set
         voice_samples = self._load_voice_samples(request.voice_id)
 
-        # Build processor inputs
+        # Build processor inputs (move tensors individually for robustness)
+        proc_kwargs: dict = {"text": text, "return_tensors": "pt"}
         if voice_samples:
-            inputs = self._processor(
-                text=text,
-                voice_samples=voice_samples,
-                return_tensors="pt",
-            ).to(self._device)
-        else:
-            inputs = self._processor(
-                text=text,
-                return_tensors="pt",
-            ).to(self._device)
+            proc_kwargs["voice_samples"] = voice_samples
+        raw_inputs = self._processor(**proc_kwargs)
+        inputs = {k: v.to(self._device) if hasattr(v, "to") else v for k, v in raw_inputs.items()}
 
-        # Determine cfg_scale from extras or default
-        cfg_scale = request.extra.get("cfg_scale", 3.0)
+        # Read tunable params from extras (clamp to safe ranges)
+        cfg_scale = float(request.extra.get("cfg_scale", 3.0))
+        cfg_scale = max(0.1, min(cfg_scale, 10.0))
+        ddpm_steps = int(request.extra.get("ddpm_steps", 20))
+        ddpm_steps = max(1, min(ddpm_steps, 50))
+        self._model.set_ddpm_inference_steps(num_steps=ddpm_steps)
 
         with torch.no_grad():
             output = self._model.generate(

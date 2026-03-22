@@ -44,7 +44,7 @@ class FishSpeechModel(TTSModelBase):
     supports_streaming = True
     supported_languages = ["en", "zh", "ja", "ko", "fr", "de", "ar", "es", "ru", "nl"]
     hf_repo = "fishaudio/s2-pro"
-    vram_gb_estimate = 8.0
+    vram_gb_estimate = 22.0
 
     def __init__(self) -> None:
         self._engine: Any = None
@@ -189,6 +189,10 @@ class FishSpeechModel(TTSModelBase):
         No separate embedding extraction needed — the reference audio path
         is stored and passed at generation time.
         """
+        ref_path = Path(audio_path)
+        if not ref_path.exists():
+            raise FileNotFoundError(f"Reference audio not found: {audio_path}")
+
         return {
             "model_id": self.model_id,
             "reference_audio_path": audio_path,

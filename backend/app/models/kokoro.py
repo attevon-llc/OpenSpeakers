@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import logging
+from typing import Any
 
 from app.models.base import GenerateRequest, GenerateResult, TTSModelBase
 
@@ -31,6 +32,20 @@ KOKORO_VOICES: dict[str, str] = {
 
 DEFAULT_VOICE = "en-female-1"
 
+# Map our BCP-47 language codes to Kokoro pipeline lang_codes
+LANG_TO_KOKORO: dict[str, str] = {
+    "en": "a",
+    "fr": "f",
+    "ja": "j",
+    "ko": "a",  # not natively supported, fallback to English
+    "zh": "z",
+    "hi": "h",
+    "pt": "p",
+    "it": "i",
+    "es": "e",
+    "pl": "a",  # not natively supported, fallback to English
+}
+
 
 class KokoroModel(TTSModelBase):
     model_id = "kokoro"
@@ -43,43 +58,52 @@ class KokoroModel(TTSModelBase):
     vram_gb_estimate = 0.5
 
     def __init__(self) -> None:
-        self._pipeline = None
+        self._pipelines: dict[str, Any] = {}  # lang_code -> KPipeline
+        self._device: str = "cuda"
 
     def load(self, device: str = "cuda") -> None:
         logger.info("Loading Kokoro on %s", device)
+        self._device = device
         try:
             from kokoro import KPipeline
 
-            self._pipeline = KPipeline(lang_code="a", device=device)
+            # Create default American English pipeline (internally creates KModel)
+            self._pipelines["a"] = KPipeline(lang_code="a", device=device)
             self._loaded = True
             logger.info("Kokoro loaded")
         except ImportError:
             logger.warning(
                 "kokoro package not installed. Install with: pip install kokoro soundfile"
             )
-            self._pipeline = None
-            self._loaded = True
+            self._loaded = False
 
     def unload(self) -> None:
-        del self._pipeline
-        self._pipeline = None
+        import torch
+
+        self._pipelines.clear()
         self._loaded = False
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def generate(self, request: GenerateRequest) -> GenerateResult:
         if not self._loaded:
             raise RuntimeError("Kokoro is not loaded")
-        if self._pipeline is None:
+        if not self._pipelines:
             raise RuntimeError("kokoro package not installed. Run: pip install kokoro")
 
         import numpy as np
         import soundfile as sf
 
         voice_key = request.voice_id or DEFAULT_VOICE
-        kokoro_voice = KOKORO_VOICES.get(voice_key, KOKORO_VOICES[DEFAULT_VOICE])
+        # Allow raw kokoro voice names (e.g. "af_heart") as well as our slugs
+        kokoro_voice = KOKORO_VOICES.get(voice_key, voice_key)
+
+        # Determine the correct language pipeline
+        pipeline = self._get_pipeline(kokoro_voice, request.language)
 
         samples = []
         sample_rate = 24000
-        for _, _, audio in self._pipeline(request.text, voice=kokoro_voice, speed=request.speed):
+        for _, _, audio in pipeline(request.text, voice=kokoro_voice, speed=request.speed):
             samples.append(audio)
 
         audio_np = np.concatenate(samples) if samples else np.zeros(0, dtype=np.float32)
@@ -94,3 +118,41 @@ class KokoroModel(TTSModelBase):
             duration_seconds=duration,
             format="wav",
         )
+
+    def _get_pipeline(self, kokoro_voice: str, language: str):
+        """Get or create a KPipeline for the appropriate language.
+
+        Kokoro voice names encode language as the first letter (e.g. "af_heart"
+        -> "a" for American English). We use this to select the right G2P
+        pipeline. Each pipeline shares the same KModel to avoid duplicate
+        weight loading.
+        """
+        # Voice names encode language as first letter
+        voice_lang = kokoro_voice[0] if kokoro_voice else "a"
+        # Use voice language if it looks valid, otherwise fall back to request language
+        lang_code = (
+            voice_lang
+            if voice_lang in LANG_TO_KOKORO.values()
+            else LANG_TO_KOKORO.get(language, "a")
+        )
+
+        if lang_code in self._pipelines:
+            return self._pipelines[lang_code]
+
+        # Create a new pipeline for this language, sharing the model
+        try:
+            from kokoro import KPipeline
+
+            # Share the KModel from the default English pipeline
+            shared_model = self._pipelines["a"].model
+            pipeline = KPipeline(lang_code=lang_code, model=shared_model)
+            self._pipelines[lang_code] = pipeline
+            logger.info("Created Kokoro pipeline for lang_code=%s", lang_code)
+            return pipeline
+        except Exception as exc:
+            logger.warning(
+                "Failed to create %s pipeline (%s), falling back to English",
+                lang_code,
+                exc,
+            )
+            return self._pipelines["a"]

@@ -36,7 +36,7 @@ RUN pip install --no-cache-dir \
     "python-dotenv>=1.0.0"
 
 # ── Kokoro TTS (82M — fast, < 1 GB VRAM, preset voices) ───────────────────
-RUN pip install --no-cache-dir "kokoro>=0.9.2" && \
+RUN pip install --no-cache-dir "kokoro>=0.9.2" "misaki[ja]" "misaki[zh]" && \
     python -m spacy download en_core_web_sm
 
 # ── Fish Speech ────────────────────────────────────────────────────────────

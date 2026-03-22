@@ -188,9 +188,6 @@ def generate_tts(self: TTSTask, job_id: str) -> dict:
             job.model_id,
         )
 
-        # Unload model to free GPU VRAM for other workers sharing the GPU
-        self.manager.unload_all()
-
         return {"job_id": job_id, "status": "complete", "output_path": str(output_path)}
 
     except Exception as exc:
@@ -207,6 +204,12 @@ def generate_tts(self: TTSTask, job_id: str) -> dict:
             logger.exception("Failed to update job status for %s", job_id)
         raise
     finally:
+        # Always unload model to free GPU VRAM — on success AND failure.
+        # Prevents broken model state from persisting after errors.
+        try:
+            self.manager.unload_all()
+        except Exception:
+            logger.debug("unload_all failed in finally (non-fatal)")
         db.close()
 
 

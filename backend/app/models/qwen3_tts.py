@@ -165,8 +165,17 @@ class Qwen3TTSModel(TTSModelBase):
         import torch
         from qwen_tts import Qwen3TTSModel as QwenModel
 
-        # Lazy-load the Base (cloning) model if not already loaded
+        # Swap to the Base (cloning) model if not already loaded
         if self._clone_model is None:
+            # Unload the CustomVoice model first to free VRAM (~10GB)
+            if self._custom_voice_model is not None:
+                logger.info("Unloading CustomVoice model to make room for Base model…")
+                del self._custom_voice_model
+                self._custom_voice_model = None
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
             attn_impl = "flash_attention_2"
             try:
                 import flash_attn  # noqa: F401
@@ -183,12 +192,22 @@ class Qwen3TTSModel(TTSModelBase):
 
         ref_text = request.extra.get("ref_text", "")
 
-        wavs, sample_rate = self._clone_model.generate_voice_clone(
-            text=request.text,
-            language=language,
-            ref_audio=request.voice_id,
-            ref_text=ref_text,
-        )
+        try:
+            wavs, sample_rate = self._clone_model.generate_voice_clone(
+                text=request.text,
+                language=language,
+                ref_audio=request.voice_id,
+                ref_text=ref_text,
+            )
+        except Exception:
+            # Clean up to prevent broken state — tts_tasks.py finally will
+            # call unload_all() but we also clear here for safety.
+            del self._clone_model
+            self._clone_model = None
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            raise
 
         if not wavs or len(wavs[0]) == 0:
             raise RuntimeError("Qwen3 TTS clone generation produced no audio")
