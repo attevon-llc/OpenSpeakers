@@ -138,9 +138,27 @@
   });
 
   onMount(async () => {
+    loadOutputFormat();
     await refreshModels();
     await loadSystemInfo();
   });
+
+  // Default output format
+  const OUTPUT_FORMAT_KEY = 'openspeakers:output_format';
+  type OutputFormat = 'wav' | 'mp3' | 'ogg';
+  let defaultOutputFormat = $state<OutputFormat>('wav');
+
+  function loadOutputFormat(): void {
+    const stored = localStorage.getItem(OUTPUT_FORMAT_KEY);
+    if (stored === 'mp3' || stored === 'ogg' || stored === 'wav') {
+      defaultOutputFormat = stored;
+    }
+  }
+
+  function saveOutputFormat(fmt: OutputFormat): void {
+    defaultOutputFormat = fmt;
+    localStorage.setItem(OUTPUT_FORMAT_KEY, fmt);
+  }
 
   async function loadSystemInfo(): Promise<void> {
     if (!systemInfo) loadingInfo = true;
@@ -343,12 +361,9 @@
                 </span>
               </div>
               <div class="h-2.5 bg-gray-100 dark:bg-[#2a2a2f] rounded-full overflow-hidden">
-                {@const memPct = Math.round(
-                  (systemInfo.gpu.nvidia_smi.memory_used_mb / systemInfo.gpu.nvidia_smi.memory_total_mb) * 100
-                )}
                 <div
-                  class="h-full rounded-full transition-all duration-500 {vramBarColor(memPct)}"
-                  style="width: {memPct}%"
+                  class="h-full rounded-full transition-all duration-500 {vramBarColor(Math.round((systemInfo.gpu.nvidia_smi.memory_used_mb / systemInfo.gpu.nvidia_smi.memory_total_mb) * 100))}"
+                  style="width: {Math.round((systemInfo.gpu.nvidia_smi.memory_used_mb / systemInfo.gpu.nvidia_smi.memory_total_mb) * 100)}%"
                 ></div>
               </div>
             </div>
@@ -412,11 +427,11 @@
       </button>
     </div>
 
-    {#if $models.length === 0}
+    {#if models.length === 0}
       <p class="text-sm text-gray-400 py-4 text-center">No models registered.</p>
     {:else}
       <ul class="divide-y divide-gray-100 dark:divide-gray-700/50">
-        {#each $models as model (model.id)}
+        {#each models as model (model.id)}
           <li class="py-3 flex items-start gap-3">
             <div
               class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0
@@ -440,12 +455,25 @@
                 >
                   {model.status}
                 </span>
+                {#if model.supports_streaming}
+                  <span
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+                           bg-primary-100 text-primary-700
+                           dark:bg-primary-900/30 dark:text-primary-400
+                           border border-primary-200 dark:border-primary-500/20"
+                  >
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                    </svg>
+                    streaming
+                  </span>
+                {/if}
                 {#if model.supports_voice_cloning}
                   <span
                     class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                           bg-purple-100 text-purple-700
-                           dark:bg-purple-500/15 dark:text-purple-400
-                           border border-purple-200 dark:border-purple-500/20"
+                           bg-teal-100 text-teal-700
+                           dark:bg-teal-500/15 dark:text-teal-400
+                           border border-teal-200 dark:border-teal-500/20"
                   >
                     cloning
                   </span>
@@ -461,6 +489,29 @@
         {/each}
       </ul>
     {/if}
+  </div>
+
+  <!-- Default Output Format -->
+  <div class="card p-5 space-y-3">
+    <h2 class="section-title">Default Output Format</h2>
+    <p class="text-sm text-gray-500 dark:text-gray-400">
+      Choose the default audio format for generated files. Can be overridden per-generation on the TTS page.
+    </p>
+    <div class="flex items-center gap-3">
+      <label class="text-sm font-medium text-gray-700 dark:text-gray-300" for="output-format-select">
+        Format
+      </label>
+      <select
+        id="output-format-select"
+        value={defaultOutputFormat}
+        onchange={(e) => saveOutputFormat(e.currentTarget.value as OutputFormat)}
+        class="input max-w-xs"
+      >
+        <option value="wav">WAV (lossless, larger file)</option>
+        <option value="mp3">MP3 (compressed, smaller file)</option>
+        <option value="ogg">OGG (open format, good compression)</option>
+      </select>
+    </div>
   </div>
 
   <!-- Storage -->
@@ -502,4 +553,44 @@
       </div>
     </div>
   {/if}
+
+  <!-- OpenAI API Compatibility -->
+  <div class="card p-5 space-y-4">
+    <h2 class="section-title">OpenAI API Compatibility</h2>
+    <p class="text-sm text-gray-500 dark:text-gray-400">
+      Use OpenSpeakers as a drop-in replacement for the OpenAI TTS API. Point any OpenAI-compatible
+      app to this server instead of api.openai.com.
+    </p>
+    <div class="bg-gray-900 rounded-lg p-4 font-mono text-sm overflow-x-auto">
+      <p class="text-gray-400 mb-2"># Python example:</p>
+      <code class="text-green-400 whitespace-pre-wrap">from openai import OpenAI
+client = OpenAI(
+    base_url="http://localhost:8080/v1",
+    api_key="not-needed"
+)
+audio = client.audio.speech.create(
+    model="tts-1",
+    voice="alloy",
+    input="Hello world!"
+)
+audio.stream_to_file("output.mp3")</code>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+      <div>
+        <dt class="text-gray-500 dark:text-gray-400 text-xs mb-1">Base URL</dt>
+        <dd class="font-mono text-gray-200 bg-gray-900 px-3 py-1.5 rounded text-xs select-all">
+          http://localhost:8080/v1
+        </dd>
+      </div>
+      <div>
+        <dt class="text-gray-500 dark:text-gray-400 text-xs mb-1">API Key</dt>
+        <dd class="font-mono text-gray-400 bg-gray-900 px-3 py-1.5 rounded text-xs">
+          not-needed (any value works)
+        </dd>
+      </div>
+    </div>
+    <p class="text-gray-500 dark:text-gray-500 text-xs">
+      Compatible with: Continue.dev, OpenWebUI, SillyTavern, AnythingLLM, and any app using the OpenAI TTS API.
+    </p>
+  </div>
 </div>

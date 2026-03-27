@@ -235,17 +235,16 @@ async def gpu_stats_ws(websocket: WebSocket) -> None:
 
 
 def publish_progress_sync(job_id: str, event: dict) -> None:
-    """Synchronous wrapper — call this from Celery tasks."""
-    import asyncio
+    """Publish a progress event from a Celery task using the synchronous Redis client.
 
-    async def _inner():
-        client = aioredis.from_url(_REDIS_URL, decode_responses=True)
-        try:
-            await client.publish(job_channel(job_id), json.dumps(event))
-        finally:
-            await client.aclose()
+    asyncio.run() inside Celery tasks is unreliable (event-loop conflicts), so we
+    use the plain synchronous redis client here instead of redis.asyncio.
+    """
+    import redis as sync_redis
 
     try:
-        asyncio.run(_inner())
+        client = sync_redis.from_url(_REDIS_URL, decode_responses=True)
+        client.publish(job_channel(job_id), json.dumps(event))
+        client.close()
     except Exception:
         logger.exception("Failed to publish progress for job %s", job_id)

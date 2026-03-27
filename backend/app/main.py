@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.endpoints.openai_compat import router as openai_compat_router
 from app.api.endpoints.system import router as system_router
 from app.api.router import api_router
 from app.api.websockets import ws_router
@@ -164,3 +165,6 @@ app.include_router(api_router)
 
 # WebSocket routes (no /api prefix — proxied separately in nginx)
 app.include_router(ws_router)
+
+# OpenAI-compatible API (mounted at root so /v1/audio/speech works)
+app.include_router(openai_compat_router)

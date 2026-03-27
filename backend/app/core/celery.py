@@ -33,6 +33,9 @@ celery_app.conf.update(
         Queue("tts"),
         Queue("tts.fish-speech"),
         Queue("tts.qwen3"),
+        Queue("tts.orpheus"),
+        Queue("tts.dia"),
+        Queue("tts.f5-tts"),
     ],
     # Default routes (overridden at dispatch time for model-specific routing)
     task_routes={

@@ -6,6 +6,7 @@
     description: string;
     features: string[];
     vram: string;
+    streaming: boolean;
     cloning: boolean;
     cloningLabel: string;
     comingSoon: boolean;
@@ -14,6 +15,22 @@
   }
 
   const models: ModelCard[] = [
+    {
+      name: 'Kokoro 82M',
+      org: 'hexgrad',
+      description: 'Ultra-lightweight TTS with 50+ preset voices and blazing-fast inference. #1 on TTS Arena.',
+      features: [
+        '50+ high-quality preset voices',
+        'Ultra-fast inference (<1s cached)',
+        'Minimal VRAM footprint',
+      ],
+      vram: '<1 GB',
+      streaming: false,
+      cloning: false,
+      cloningLabel: 'Preset voices only',
+      comingSoon: false,
+      hfLink: 'https://huggingface.co/hexgrad/Kokoro-82M',
+    },
     {
       name: 'VibeVoice Realtime 0.5B',
       org: 'Microsoft',
@@ -24,6 +41,7 @@
         'End-to-end speech LM with diffusion TTS head',
       ],
       vram: '~4.5 GB',
+      streaming: true,
       cloning: false,
       cloningLabel: 'Pre-made voices only',
       comingSoon: false,
@@ -35,10 +53,11 @@
       description: 'Zero-shot voice cloning with multi-speaker, long-form TTS support.',
       features: [
         'Zero-shot voice cloning from 5-30s reference audio',
-        'Multi-speaker conversations',
+        'Multi-speaker conversations (Speaker 0 / Speaker 1)',
         'Long-form generation up to ~90 minutes',
       ],
       vram: '~12 GB',
+      streaming: false,
       cloning: true,
       cloningLabel: 'Zero-shot cloning',
       comingSoon: false,
@@ -48,47 +67,133 @@
     {
       name: 'Fish Audio S2-Pro',
       org: 'Fish Audio',
-      description: 'Zero-shot voice cloning with emotion tags and 80+ language support.',
+      description: 'Zero-shot voice cloning with 15,000+ emotion tags and 80+ language support.',
       features: [
         'Zero-shot voice cloning from 3-10s reference audio',
-        '80+ languages with emotion tag control',
+        '80+ languages with [emotion] tag control',
         'DualAR architecture with DAC codec',
       ],
       vram: '~22 GB',
+      streaming: false,
       cloning: true,
       cloningLabel: 'Zero-shot cloning',
       comingSoon: false,
       hfLink: 'https://huggingface.co/fishaudio/s2-pro',
     },
     {
-      name: 'Kokoro 82M',
-      org: 'hexgrad',
-      description: 'Ultra-lightweight TTS with 50+ preset voices and fast inference.',
-      features: [
-        '50+ high-quality preset voices',
-        'Ultra-fast inference (<1s cached)',
-        'Minimal resource footprint',
-      ],
-      vram: '<1 GB',
-      cloning: false,
-      cloningLabel: 'Preset voices only',
-      comingSoon: false,
-      hfLink: 'https://huggingface.co/hexgrad/Kokoro-82M',
-    },
-    {
       name: 'Qwen3 TTS 1.7B',
       org: 'Alibaba',
-      description: 'Large multilingual model with instruction-based style control.',
+      description: 'Large multilingual model with natural language instruction-based style control.',
       features: [
-        'Instruction-based style control',
-        'Multilingual support',
-        'Voice cloning capability',
+        'Instruction-based style control (free-text prompts)',
+        'Multilingual with voice cloning capability',
+        'Apache 2.0 license',
       ],
       vram: '~10 GB',
+      streaming: false,
       cloning: true,
       cloningLabel: 'Voice cloning',
       comingSoon: false,
       hfLink: 'https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice',
+    },
+    {
+      name: 'F5-TTS',
+      org: 'SWivid',
+      description: 'Flow matching TTS with zero-shot cloning at 0.15x real-time factor — one of the fastest available.',
+      features: [
+        'Zero-shot voice cloning from any reference audio',
+        '0.15x RTF — generates 10s audio in 1.5s',
+        'MIT license — highly permissive',
+      ],
+      vram: '~3 GB',
+      streaming: false,
+      cloning: true,
+      cloningLabel: 'Zero-shot cloning',
+      comingSoon: false,
+      hfLink: 'https://huggingface.co/SWivid/F5-TTS',
+    },
+    {
+      name: 'Chatterbox',
+      org: 'Resemble AI',
+      description: 'High-quality TTS with emotion exaggeration control and natural paralinguistic sounds.',
+      features: [
+        'Voice cloning from 5s reference audio',
+        'Emotion exaggeration slider',
+        'Paralinguistic tags: [laugh], [cough], [sigh], [gasp]',
+      ],
+      vram: '~5 GB',
+      streaming: true,
+      cloning: true,
+      cloningLabel: 'Voice cloning',
+      comingSoon: false,
+      hfLink: 'https://huggingface.co/ResembleAI/chatterbox',
+      githubLink: 'https://github.com/resemble-ai/chatterbox',
+    },
+    {
+      name: 'Orpheus 3B',
+      org: 'Canopy Labs',
+      description: 'Llama-backbone 3B model with streaming and natural emotion tag support.',
+      features: [
+        '8 built-in voices (tara, leah, leo, dan, and more)',
+        'Streaming synthesis at ~200ms latency',
+        'Emotion tags: <laugh>, <sigh>, <gasp>, <yawn>',
+      ],
+      vram: '~7 GB',
+      streaming: true,
+      cloning: false,
+      cloningLabel: 'Built-in voices',
+      comingSoon: false,
+      hfLink: 'https://huggingface.co/canopylabs/orpheus-3b-0.1-pretrain',
+    },
+    {
+      name: 'CosyVoice 2.0',
+      org: 'FunAudioLLM (Alibaba)',
+      description: '150ms ultra-low latency voice cloning with text-based voice design mode.',
+      features: [
+        'Zero-shot cloning with 150ms first-chunk latency',
+        'MOS 5.53 — among the highest measured quality',
+        'Instruct mode: design voice via text description',
+      ],
+      vram: '~5 GB',
+      streaming: true,
+      cloning: true,
+      cloningLabel: 'Zero-shot cloning',
+      comingSoon: false,
+      hfLink: 'https://huggingface.co/FunAudioLLM/CosyVoice2-0.5B',
+    },
+    {
+      name: 'Parler TTS Mini',
+      org: 'Parler / Stability AI',
+      description: 'Unique: generate any voice from a text description — no reference audio required.',
+      features: [
+        'Describe voice in plain English to generate it',
+        'Control pitch, pace, accent, recording quality',
+        'No reference audio — fully description-driven',
+      ],
+      vram: '~2 GB',
+      streaming: false,
+      cloning: false,
+      cloningLabel: 'Description-driven voice',
+      comingSoon: false,
+      hfLink: 'https://huggingface.co/parler-tts/parler-tts-mini-v1',
+      githubLink: 'https://github.com/huggingface/parler-tts',
+    },
+    {
+      name: 'Dia 1.6B',
+      org: 'Nari Labs',
+      description: 'Dialogue-specialized model with two-speaker [S1]/[S2] synthesis and nonverbal sounds.',
+      features: [
+        '[S1]/[S2] multi-speaker dialogue generation',
+        'Nonverbal sounds: (laughs), (sighs), (coughs)',
+        'Voice cloning from reference audio',
+      ],
+      vram: '~10 GB',
+      streaming: true,
+      cloning: true,
+      cloningLabel: 'Voice cloning',
+      comingSoon: false,
+      hfLink: 'https://huggingface.co/nari-labs/Dia-1.6B',
+      githubLink: 'https://github.com/nari-labs/dia',
     },
   ];
 </script>
@@ -99,12 +204,15 @@
 
 <div class="p-6 max-w-4xl mx-auto space-y-8">
   <!-- Header -->
-  <div>
-    <h1 class="page-title text-2xl">About OpenSpeakers</h1>
-    <p class="page-description mt-2">
-      A unified text-to-speech and voice cloning application powered by multiple open-source models
-      with hot-swap GPU management.
-    </p>
+  <div class="flex items-center gap-4">
+    <img src="/logo.svg" alt="OpenSpeakers" class="w-16 h-16 flex-shrink-0" />
+    <div>
+      <h1 class="page-title text-2xl">OpenSpeakers</h1>
+      <p class="page-description mt-1">
+        A unified text-to-speech and voice cloning application powered by multiple open-source models
+        with hot-swap GPU management.
+      </p>
+    </div>
   </div>
 
   <!-- Overview -->
@@ -152,10 +260,18 @@
             {/each}
           </ul>
 
-          <!-- Cloning badge -->
-          <div>
+          <!-- Capability badges -->
+          <div class="flex flex-wrap gap-2">
+            {#if model.streaming}
+              <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-500/15 dark:text-primary-400 border border-primary-200 dark:border-primary-500/20 font-medium">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                </svg>
+                Streaming
+              </span>
+            {/if}
             {#if model.cloning}
-              <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20 font-medium">
+              <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-400 border border-teal-200 dark:border-teal-500/20 font-medium">
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
@@ -167,6 +283,7 @@
               </span>
             {/if}
           </div>
+
 
           <!-- Links -->
           <div class="flex gap-2 pt-1">

@@ -21,7 +21,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openspeakers}"]
       interval: 5s
@@ -35,7 +35,7 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -99,6 +99,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - AUDIO_OUTPUT_DIR=/app/audio_output
+      - HF_HOME=/home/appuser/.cache/huggingface
+      - HOME=/home/appuser
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.core.celery inspect ping -d tts-worker@$$HOSTNAME"]
       interval: 30s
@@ -171,6 +173,115 @@ services:
       - AUDIO_OUTPUT_DIR=/app/audio_output
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.core.celery inspect ping -d qwen3-worker@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-f5:
+    container_name: open_speakers-worker-f5
+    restart: always
+    env_file: .env
+    security_opt:
+      - no-new-privileges:true
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info
+      -Q tts.f5-tts
+      --pool=threads
+      --concurrency=1
+      --hostname f5-worker@%h
+      -E
+    volumes:
+      - ${MODEL_CACHE_DIR:-./models}/huggingface:/root/.cache/huggingface
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+      - /mnt/nas/models:/models
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUDIO_OUTPUT_DIR=/app/audio_output
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery inspect ping -d f5-worker@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-orpheus:
+    container_name: open_speakers-worker-orpheus
+    restart: always
+    env_file: .env
+    security_opt:
+      - no-new-privileges:true
+    shm_size: '2gb'
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info
+      -Q tts.orpheus
+      --pool=threads
+      --concurrency=1
+      --hostname orpheus-worker@%h
+      -E
+    volumes:
+      - ${MODEL_CACHE_DIR:-./models}/huggingface:/root/.cache/huggingface
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+      - /mnt/nas/models:/models
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUDIO_OUTPUT_DIR=/app/audio_output
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery inspect ping -d orpheus-worker@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-dia:
+    container_name: open_speakers-worker-dia
+    restart: always
+    env_file: .env
+    security_opt:
+      - no-new-privileges:true
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info
+      -Q tts.dia
+      --pool=threads
+      --concurrency=1
+      --hostname dia-worker@%h
+      -E
+    volumes:
+      - ${MODEL_CACHE_DIR:-./models}/huggingface:/root/.cache/huggingface
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+      - /mnt/nas/models:/models
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUDIO_OUTPUT_DIR=/app/audio_output
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery inspect ping -d dia-worker@$$HOSTNAME"]
       interval: 30s
       timeout: 10s
       retries: 3

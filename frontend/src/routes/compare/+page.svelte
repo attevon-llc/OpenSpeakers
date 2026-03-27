@@ -6,6 +6,7 @@
   import { models, modelsLoading, modelsError, refreshModels } from '$stores/models';
   import { generateTTS, getAudioUrl, pollJob, type TTSJob } from '$api/tts';
   import type { ModelInfo } from '$api/models';
+  import { addToast } from '$lib/stores/toasts';
 
   let text = $state('The quick brown fox jumps over the lazy dog.');
   let selectedModelIds: string[] = $state([]);
@@ -29,7 +30,7 @@
   let cancelled = $state(false);
   let currentIndex = $state(-1);
 
-  let allModels = $derived($models);
+  let allModels = $derived(models);
   let totalSelected = $derived(selectedModelIds.length);
   let canCompare = $derived(!!text.trim() && totalSelected >= 1 && !generating);
   let progressLabel = $derived(
@@ -165,12 +166,14 @@
           };
         }
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : 'Generation failed';
         results[idx] = {
           ...results[idx],
           status: 'failed',
           statusDetail: 'Failed',
-          error: err instanceof Error ? err.message : 'Generation failed',
+          error: errMsg,
         };
+        addToast('error', `${results[idx].model.name}: ${errMsg}`);
       }
     }
 
@@ -201,8 +204,8 @@
   </div>
 
   <!-- Models loading error -->
-  {#if $modelsError}
-    <ErrorBanner message={$modelsError} onRetry={refreshModels} />
+  {#if modelsError()}
+    <ErrorBanner message={modelsError()} onRetry={refreshModels} />
   {/if}
 
   <!-- Setup -->
@@ -223,13 +226,13 @@
     <div>
       <p class="label">Select models to compare <span class="label-hint">({totalSelected} of 4)</span></p>
 
-      {#if $modelsLoading}
+      {#if modelsLoading()}
         <div class="flex gap-2 mt-1">
           {#each [1, 2, 3] as _}
             <div class="h-9 w-28 bg-gray-200 dark:bg-[#1e1e22] rounded-lg animate-pulse"></div>
           {/each}
         </div>
-      {:else if allModels.length === 0 && !$modelsError}
+      {:else if allModels.length === 0 && !modelsError()}
         <p class="text-sm text-gray-500 dark:text-gray-500 mt-1">
           No models available.
           <button onclick={refreshModels} class="text-primary-500 hover:underline ml-1">

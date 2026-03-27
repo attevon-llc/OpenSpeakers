@@ -1,0 +1,74 @@
+# docker-compose.offline.yml
+# Offline / air-gapped deployment overlay.
+# Replaces docker-compose.override.yml — no internet, no source mounts, no builds.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.offline.yml -f docker-compose.gpu.yml up -d
+#
+# All paths below are relative to the directory containing this file (the install root).
+# Expected layout:
+#   ./images/           pre-loaded Docker image tarballs (loaded by install.sh)
+#   ./models/           model weights (vibevoice/, fish-speech/, Qwen/, model_cache/)
+#   ./vibevoice-repo/   VibeVoice Python package source
+#   ./audio_output/     generated audio (created on first run)
+#   ./.env              configured from .env.example
+
+services:
+  backend:
+    image: open_speakers-backend:latest
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 2
+
+  worker:
+    image: open_speakers-worker:latest
+    volumes:
+      - ${MODEL_CACHE_DIR:-./models/model_cache}/huggingface:/root/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./models/model_cache}/torch:/root/.cache/torch
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+      - ./vibevoice-repo:/opt/vibevoice
+      - ./models:/models
+    environment:
+      - PYTHONPATH=/opt/vibevoice
+      - VIBEVOICE_MODEL_PATH=/models/vibevoice/VibeVoice-Realtime-0.5B
+      - VIBEVOICE_1P5B_MODEL_PATH=/models/vibevoice/VibeVoice-1.5B
+
+  worker-fish:
+    image: open_speakers-worker-fish:latest
+    volumes:
+      - ${MODEL_CACHE_DIR:-./models/model_cache}/huggingface:/root/.cache/huggingface
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+      - ./models:/models
+    environment:
+      - PYTHONPATH=/app
+      - FISH_SPEECH_MODEL_PATH=/models/fish-speech/s2-pro
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info -Q tts.fish-speech
+      --pool=threads --concurrency=1
+      --hostname fish-worker@%h -E
+
+  worker-qwen3:
+    image: open_speakers-worker-qwen3:latest
+    volumes:
+      - ${MODEL_CACHE_DIR:-./models/model_cache}/huggingface:/root/.cache/huggingface
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+      - ./models:/models
+    environment:
+      - PYTHONPATH=/app
+      - QWEN3_TTS_MODEL_PATH=/models/Qwen/Qwen3-TTS
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info -Q tts.qwen3
+      --pool=threads --concurrency=1
+      --hostname qwen3-worker@%h -E
+
+  frontend:
+    image: open_speakers-frontend:latest
+    ports:
+      - "${FRONTEND_PORT:-5200}:80"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:80"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

@@ -8,9 +8,9 @@
          text-gray-400 hover:text-gray-600 dark:hover:text-gray-200
          hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
   aria-label="Toggle theme"
-  title={$theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+  title={theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
 >
-  {#if $theme === 'dark'}
+  {#if theme() === 'dark'}
     <!-- Sun icon -->
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

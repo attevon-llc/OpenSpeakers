@@ -8,27 +8,63 @@
   let {
     job = null,
     onComplete = (_audioUrl: string, _duration: number) => {},
-    onError = (_message: string) => {}
+    onError = (_message: string) => {},
+    onChunk = (_data: string, _sampleRate: number, _index: number) => {},
+    onCancel = undefined,
   }: {
     job?: TTSJob | null;
     onComplete?: (audioUrl: string, duration: number) => void;
     onError?: (message: string) => void;
+    onChunk?: (data: string, sampleRate: number, index: number) => void;
+    onCancel?: () => void;
   } = $props();
 
   let step: ProgressStep = $state('queued');
   let percent = $state(0);
   let etaSeconds: number | null = $state(null);
   let detail = $state('Job queued, waiting for worker...');
-  let socket: JobProgressSocket | null = $state(null);
+  // Not $state — socket is internal lifecycle management only, not used in the template.
+  // Using $state here caused Effect 2 to track it (via startSocket reading socket?.disconnect()),
+  // creating an infinite re-run loop every time the socket was set.
+  let socket: JobProgressSocket | null = null;
 
+  // Tracks which job the socket is currently open for.
+  // Only changes when a genuinely new job arrives — NOT on every status update.
+  let socketJobId = $state<string | null>(null);
+
+  // Effect 1: detect a new job ID (ignores status-only updates from pollJob).
   $effect(() => {
-    if (job && job.status !== 'complete' && job.status !== 'failed') {
-      startSocket(job.id);
+    const id = job?.id ?? null;
+    if (id && id !== socketJobId && job?.status !== 'complete' && job?.status !== 'failed') {
+      socketJobId = id;
     }
+  });
 
+  // Effect 2: open/close the socket only when the job ID itself changes.
+  // socket is NOT $state so reading it here does not create a tracking dependency.
+  $effect(() => {
+    const id = socketJobId;
+    if (!id) return;
+
+    startSocket(id);
     return () => {
       socket?.disconnect();
     };
+  });
+
+  // Effect 3: fallback — fire onComplete/onError from the job prop when WS misses it.
+  $effect(() => {
+    if (!job) return;
+    if (job.status === 'complete' && step !== 'complete') {
+      step = 'complete';
+      percent = 100;
+      detail = 'Generation complete!';
+      onComplete(`/api/tts/jobs/${job.id}/audio`, job.duration_seconds ?? 0);
+    } else if (job.status === 'failed' && step !== 'error') {
+      step = 'error';
+      detail = job.error_message ?? 'Generation failed';
+      onError(detail);
+    }
   });
 
   function startSocket(jobId: string): void {
@@ -49,6 +85,8 @@
       detail = stepLabel(step, percent);
     } else if (event.type === 'status') {
       detail = event.detail ?? stepLabel(step, percent);
+    } else if (event.type === 'audio_chunk' && event.chunk_data) {
+      onChunk(event.chunk_data, event.sample_rate ?? 24000, event.chunk_index ?? 0);
     } else if (event.type === 'complete') {
       step = 'complete';
       percent = 100;
@@ -89,9 +127,21 @@
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
         </svg>
       {/if}
-      <span class="text-gray-600 dark:text-gray-300">{detail}</span>
+      <span class="text-gray-600 dark:text-gray-300 flex-1">{detail}</span>
       {#if etaSeconds !== null && etaSeconds > 0}
         <span class="text-gray-400 text-xs">~{etaSeconds}s</span>
+      {/if}
+      {#if onCancel && (job?.status === 'pending' || job?.status === 'running' || step === 'queued' || step === 'model_loading' || step === 'generating')}
+        <button
+          type="button"
+          onclick={onCancel}
+          class="flex-shrink-0 ml-1 px-2 py-0.5 text-xs font-medium rounded
+                 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300
+                 border border-red-500/20 hover:border-red-500/40 transition-colors"
+          aria-label="Cancel job"
+        >
+          Cancel
+        </button>
       {/if}
     </div>
 
@@ -104,14 +154,15 @@
     </div>
 
     <!-- Step indicators -->
-    <div class="flex gap-4 text-xs text-gray-400">
-      <span class:text-primary-500={step === 'queued'}>Queued</span>
-      <span>-></span>
-      <span class:text-primary-500={step === 'model_loading'}>Loading model</span>
-      <span>-></span>
-      <span class:text-primary-500={step === 'generating'}>Generating</span>
-      <span>-></span>
-      <span class:text-green-500={step === 'complete'}>Done</span>
+    <div class="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-xs text-gray-400 dark:text-gray-600">
+      {#each ([ ['queued','Queue'], ['model_loading','Load'], ['generating','Generate'], ['complete','Done'] ] as const) as [s, label], i}
+        {#if i > 0}<span class="text-gray-300 dark:text-gray-700 select-none">›</span>{/if}
+        <span
+          class:text-primary-500={step === s && s !== 'complete'}
+          class:text-green-500={s === 'complete' && step === 'complete'}
+          class:font-medium={step === s}
+        >{label}</span>
+      {/each}
     </div>
   </div>
 {/if}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <radialGradient id="bg" cx="45%" cy="38%" r="70%">
+      <stop offset="0%" stop-color="#0c2a42"/>
+      <stop offset="100%" stop-color="#060e1a"/>
+    </radialGradient>
+    <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <circle cx="50" cy="50" r="50" fill="url(#bg)"/>
+  <rect x="16" y="37" width="15" height="26" rx="2.5" fill="white" opacity="0.92"/>
+  <path d="M31 33 L49 20 L49 80 L31 67 Z" fill="white" opacity="0.88"/>
+  <path d="M56 40 Q66 50 56 60" stroke="url(#waveGrad)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+  <path d="M63 33 Q77 50 63 67" stroke="url(#waveGrad)" stroke-width="3.8" stroke-linecap="round" fill="none" opacity="0.7"/>
+  <path d="M70 26 Q89 50 70 74" stroke="url(#waveGrad)" stroke-width="3.2" stroke-linecap="round" fill="none" opacity="0.4"/>
+</svg>

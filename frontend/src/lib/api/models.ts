@@ -11,6 +11,8 @@ export interface ModelInfo {
   vram_gb_estimate: number;
   is_loaded: boolean;
   status: 'loaded' | 'available' | 'loading' | 'unknown';
+  supports_speed: boolean;
+  supports_pitch: boolean;
 }
 
 export async function listModels(): Promise<ModelInfo[]> {

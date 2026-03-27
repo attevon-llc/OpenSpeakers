@@ -53,6 +53,7 @@ class KokoroModel(TTSModelBase):
     description = "Lightweight StyleTTS2-derived model with 50+ preset voices — fast, < 1 GB VRAM"
     supports_voice_cloning = False
     supports_streaming = False
+    supports_speed = True
     supported_languages = ["en", "fr", "ja", "ko", "zh", "hi", "pt", "it", "es", "pl"]
     hf_repo = "hexgrad/Kokoro-82M"
     vram_gb_estimate = 0.5
@@ -62,6 +63,14 @@ class KokoroModel(TTSModelBase):
         self._device: str = "cuda"
 
     def load(self, device: str = "cuda") -> None:
+        import torch
+
+        # Kokoro's KPipeline raises RuntimeError if device="cuda" but CUDA unavailable.
+        # Fall back to CPU automatically rather than crashing the worker.
+        if device == "cuda" and not torch.cuda.is_available():
+            logger.warning("CUDA requested but not available — falling back to CPU for Kokoro")
+            device = "cpu"
+
         logger.info("Loading Kokoro on %s", device)
         self._device = device
         try:
@@ -70,7 +79,7 @@ class KokoroModel(TTSModelBase):
             # Create default American English pipeline (internally creates KModel)
             self._pipelines["a"] = KPipeline(lang_code="a", device=device)
             self._loaded = True
-            logger.info("Kokoro loaded")
+            logger.info("Kokoro loaded on %s", device)
         except ImportError:
             logger.warning(
                 "kokoro package not installed. Install with: pip install kokoro soundfile"

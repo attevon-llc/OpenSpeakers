@@ -17,6 +17,7 @@ References:
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import io
 import logging
@@ -41,7 +42,7 @@ class FishSpeechModel(TTSModelBase):
     model_name = "Fish Audio S2-Pro"
     description = "Fish Audio S2-Pro — zero-shot voice cloning, emotion tags, 80+ languages"
     supports_voice_cloning = True
-    supports_streaming = True
+    supports_streaming = False
     supported_languages = ["en", "zh", "ja", "ko", "fr", "de", "ar", "es", "ru", "nl"]
     hf_repo = "fishaudio/s2-pro"
     vram_gb_estimate = 22.0
@@ -57,9 +58,36 @@ class FishSpeechModel(TTSModelBase):
         import torch
         import torchaudio
 
-        # Patch for torchaudio 2.10+ which removed list_audio_backends
+        # Patch for torchaudio 2.10+ which removed list_audio_backends.
         if not hasattr(torchaudio, "list_audio_backends"):
             torchaudio.list_audio_backends = lambda: ["soundfile"]
+
+        # Monkey-patch ReferenceLoader.__init__ to work around a Python scoping bug
+        # in fish_speech's reference_loader.py.  The except block in __init__ does
+        #   import torchaudio.io._load_audio_fileobj
+        # which makes 'torchaudio' a local variable for the entire function, causing
+        # an UnboundLocalError on the earlier `torchaudio.list_audio_backends()` call.
+        from fish_speech.inference_engine import reference_loader as _ref_loader
+
+        _orig_init = _ref_loader.ReferenceLoader.__init__
+
+        def _patched_init(self_ref):
+            self_ref.ref_by_id = {}
+            self_ref.ref_by_hash = {}
+            self_ref.decoder_model = None
+            self_ref.encode_reference = None
+            # Determine backend safely using module-level torchaudio
+            _ta = torchaudio
+            if hasattr(_ta, "list_audio_backends"):
+                try:
+                    backends = _ta.list_audio_backends()
+                    self_ref.backend = "ffmpeg" if "ffmpeg" in backends else "soundfile"
+                except Exception:
+                    self_ref.backend = "soundfile"
+            else:
+                self_ref.backend = "soundfile"
+
+        _ref_loader.ReferenceLoader.__init__ = _patched_init
 
         from fish_speech.inference_engine import TTSInferenceEngine
         from fish_speech.models.dac.inference import load_model as load_decoder_model
@@ -98,6 +126,10 @@ class FishSpeechModel(TTSModelBase):
         logger.info("Fish Speech loaded (%.1f GB VRAM estimate)", self.vram_gb_estimate)
 
     def unload(self) -> None:
+        # Signal the background LLM thread to stop (it exits on None sentinel)
+        if self._llama_queue is not None:
+            with contextlib.suppress(Exception):
+                self._llama_queue.put(None)
         del self._engine
         del self._llama_queue
         del self._decoder_model

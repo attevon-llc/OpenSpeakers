@@ -57,6 +57,11 @@ class VibeVoice1p5BModel(TTSModelBase):
 
     def load(self, device: str = "cuda") -> None:
         import torch
+        import torch._dynamo  # noqa: F401 — pre-import to prevent double CacheArtifact registration in PyTorch 2.6+
+
+        if device == "cuda" and not torch.cuda.is_available():
+            logger.warning("CUDA not available — falling back to CPU for VibeVoice 1.5B")
+            device = "cpu"
         from vibevoice import VibeVoiceForConditionalGenerationInference
         from vibevoice.processor import VibeVoiceProcessor
 
@@ -124,7 +129,8 @@ class VibeVoice1p5BModel(TTSModelBase):
         if re.search(r"Speaker\s*\d+\s*:", request.text):
             text = request.text
         else:
-            text = f"Speaker 0: {request.text}"
+            speaker_id = request.extra.get("speaker_id", 0)
+            text = f"Speaker {speaker_id}: {request.text}"
 
         # Prepare voice samples for cloning if a voice profile is set
         voice_samples = self._load_voice_samples(request.voice_id)

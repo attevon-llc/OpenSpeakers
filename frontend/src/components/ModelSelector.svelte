@@ -45,8 +45,16 @@
         <div class="flex items-center gap-2 flex-wrap">
           <span class="font-medium">{selected.name}</span>
           <span class="{statusClass(selected.status)}">{selected.status}</span>
+          {#if selected.supports_streaming}
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400 font-medium">
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+              </svg>
+              streaming
+            </span>
+          {/if}
           {#if selected.supports_voice_cloning}
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400">
               voice cloning
             </span>
           {/if}

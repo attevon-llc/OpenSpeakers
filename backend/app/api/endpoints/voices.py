@@ -7,12 +7,18 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.db.models import VoiceProfile
-from app.schemas.voices import BuiltinVoice, VoiceListResponse, VoiceProfileResponse
+from app.schemas.voices import (
+    BuiltinVoice,
+    VoiceListResponse,
+    VoiceProfileResponse,
+    VoiceProfileUpdate,
+)
 from app.tasks.tts_tasks import clone_voice
 
 router = APIRouter(prefix="/voices", tags=["voices"])
@@ -21,6 +27,13 @@ router = APIRouter(prefix="/voices", tags=["voices"])
 QUEUE_MAP: dict[str, str] = {
     "fish-speech-s2": "tts.fish-speech",
     "qwen3-tts": "tts.qwen3",
+    "orpheus-3b": "tts.orpheus",
+    "f5-tts": "tts.f5-tts",
+    "chatterbox": "tts.f5-tts",
+    "cosyvoice-2": "tts.f5-tts",
+    "xtts-v2": "tts.xtts",
+    "dia-1b": "tts.dia",
+    "bark": "tts.bark",
 }
 
 # Max reference audio duration in seconds (enforced upstream by the task)
@@ -54,16 +67,26 @@ async def create_voice_profile(
 
     The voice embedding is generated asynchronously via a Celery task.
     """
-    # Validate file type
-    if reference_audio.content_type not in (
+    # Validate file type — accept all common audio containers (ffmpeg handles decoding)
+    ALLOWED_TYPES = {
         "audio/wav",
+        "audio/x-wav",
         "audio/mpeg",
+        "audio/mp3",
         "audio/flac",
         "audio/x-flac",
-    ):
+        "audio/ogg",
+        "audio/opus",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/aac",
+        "video/mp4",  # browsers sometimes report M4A as video/mp4
+    }
+    content_type = (reference_audio.content_type or "").split(";")[0].strip()
+    if content_type and content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=422,
-            detail=f"Unsupported audio type: {reference_audio.content_type}. Use WAV, MP3, or FLAC.",
+            detail=f"Unsupported audio type: {content_type}. Use WAV, MP3, FLAC, M4A, or OGG.",
         )
 
     # Save reference audio
@@ -104,23 +127,7 @@ async def create_voice_profile(
     return VoiceProfileResponse.model_validate(profile)
 
 
-@router.delete("/{voice_id}", status_code=204)
-def delete_voice_profile(voice_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
-    """Delete a voice profile and its associated files."""
-    profile = db.query(VoiceProfile).filter(VoiceProfile.id == voice_id).first()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Voice profile not found")
-
-    # Delete files
-    for path_attr in ("reference_audio_path", "embedding_path"):
-        path_str = getattr(profile, path_attr, None)
-        if path_str:
-            Path(path_str).unlink(missing_ok=True)
-
-    db.delete(profile)
-    db.commit()
-
-
+# NOTE: /builtin/{model_id} must come BEFORE /{voice_id} to avoid route conflicts
 @router.get("/builtin/{model_id}", response_model=list[BuiltinVoice])
 def list_builtin_voices(model_id: str) -> list[BuiltinVoice]:
     """List built-in voices for a specific model."""
@@ -167,3 +174,80 @@ def list_builtin_voices(model_id: str) -> list[BuiltinVoice]:
             )
 
     return builtin
+
+
+@router.get("/{voice_id}", response_model=VoiceProfileResponse)
+def get_voice_profile(voice_id: uuid.UUID, db: Session = Depends(get_db)) -> VoiceProfileResponse:
+    """Get a single voice profile by ID."""
+    profile = db.query(VoiceProfile).filter(VoiceProfile.id == voice_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Voice profile not found")
+    return VoiceProfileResponse.model_validate(profile)
+
+
+@router.patch("/{voice_id}", response_model=VoiceProfileResponse)
+def update_voice_profile(
+    voice_id: uuid.UUID,
+    update: VoiceProfileUpdate,
+    db: Session = Depends(get_db),
+) -> VoiceProfileResponse:
+    """Update name, description, or tags on a voice profile."""
+    profile = db.query(VoiceProfile).filter(VoiceProfile.id == voice_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Voice profile not found")
+
+    if update.name is not None:
+        profile.name = update.name
+    if update.description is not None:
+        profile.description = update.description
+    if update.tags is not None:
+        profile.tags = update.tags
+
+    db.commit()
+    db.refresh(profile)
+    return VoiceProfileResponse.model_validate(profile)
+
+
+@router.get("/{voice_id}/audio")
+def get_voice_audio(voice_id: uuid.UUID, db: Session = Depends(get_db)) -> FileResponse:
+    """Return the reference audio file for a voice profile."""
+    profile = db.query(VoiceProfile).filter(VoiceProfile.id == voice_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Voice profile not found")
+
+    ref_path = Path(profile.reference_audio_path)
+    if not ref_path.exists():
+        raise HTTPException(status_code=404, detail="Reference audio file not found on disk")
+
+    ext = ref_path.suffix.lower()
+    media_types = {
+        ".wav": "audio/wav",
+        ".mp3": "audio/mpeg",
+        ".flac": "audio/flac",
+        ".ogg": "audio/ogg",
+        ".m4a": "audio/mp4",
+    }
+    media_type = media_types.get(ext, "audio/wav")
+
+    return FileResponse(
+        path=str(ref_path),
+        media_type=media_type,
+        filename=f"voice_{voice_id}{ext}",
+    )
+
+
+@router.delete("/{voice_id}", status_code=204)
+def delete_voice_profile(voice_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+    """Delete a voice profile and its associated files."""
+    profile = db.query(VoiceProfile).filter(VoiceProfile.id == voice_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Voice profile not found")
+
+    # Delete files
+    for path_attr in ("reference_audio_path", "embedding_path"):
+        path_str = getattr(profile, path_attr, None)
+        if path_str:
+            Path(path_str).unlink(missing_ok=True)
+
+    db.delete(profile)
+    db.commit()

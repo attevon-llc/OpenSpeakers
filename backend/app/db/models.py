@@ -28,6 +28,7 @@ class JobStatus(str, PyEnum):
     RUNNING = "running"
     COMPLETE = "complete"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class TTSJob(Base):
@@ -56,6 +57,10 @@ class TTSJob(Base):
         nullable=False,
         index=True,
     )
+    celery_task_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -82,6 +87,8 @@ class VoiceProfile(Base):
     embedding_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # Model-specific extra info (embedding file paths, etc.)
     extra_info: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[list] = mapped_column(JSON, default=list, nullable=False, server_default="[]")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

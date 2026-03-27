@@ -9,9 +9,12 @@ FastAPI WebSocket endpoint can stream it to the browser in real time.
 
 from __future__ import annotations
 
+import base64
+import io
 import logging
 import time
 import uuid
+import wave
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -76,7 +79,15 @@ def generate_tts(self: TTSTask, job_id: str) -> dict:
         if not job:
             raise ValueError(f"Job {job_id} not found")
 
+        # Check if already cancelled (race condition: user cancelled while queued)
+        if job.status == JobStatus.CANCELLED:
+            return {"job_id": job_id, "status": "cancelled"}
+
         job.status = JobStatus.RUNNING
+        db.commit()
+
+        # Store celery task ID so it can be revoked for cancellation
+        job.celery_task_id = self.request.id
         db.commit()
 
         _pub(
@@ -130,7 +141,7 @@ def generate_tts(self: TTSTask, job_id: str) -> dict:
             },
         )
 
-        # ── Step 3: Generate audio ────────────────────────────────────────────
+        # ── Step 3: Generate audio (streaming or batch) ──────────────────────
         _pub(
             job_id,
             {
@@ -141,7 +152,47 @@ def generate_tts(self: TTSTask, job_id: str) -> dict:
             },
         )
 
-        result = model.generate(request)
+        self.manager.mark_in_use()
+        try:
+            if getattr(model, "supports_streaming", False):
+                # Streaming: publish PCM16 chunks to Redis as they arrive,
+                # then assemble a final WAV from all chunks.
+                all_pcm_chunks: list[bytes] = []
+                stream_sample_rate = 24000
+
+                for chunk_index, pcm16_bytes in enumerate(model.stream_generate(request)):
+                    all_pcm_chunks.append(pcm16_bytes)
+                    _pub(
+                        job_id,
+                        {
+                            "type": "audio_chunk",
+                            "chunk_data": base64.b64encode(pcm16_bytes).decode("ascii"),
+                            "chunk_index": chunk_index,
+                            "sample_rate": stream_sample_rate,
+                        },
+                    )
+
+                # Assemble final WAV from all collected PCM16 chunks
+                all_pcm = b"".join(all_pcm_chunks)
+                num_samples = len(all_pcm) // 2  # PCM16 = 2 bytes per sample
+                duration_seconds = num_samples / stream_sample_rate
+
+                wav_buf = io.BytesIO()
+                with wave.open(wav_buf, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(stream_sample_rate)
+                    wf.writeframes(all_pcm)
+                wav_buf.seek(0)
+                audio_bytes = wav_buf.read()
+                audio_format = "wav"
+            else:
+                result = model.generate(request)
+                audio_bytes = result.audio_bytes
+                duration_seconds = result.duration_seconds
+                audio_format = result.format
+        finally:
+            self.manager.mark_done()
 
         _pub(
             job_id,
@@ -156,15 +207,34 @@ def generate_tts(self: TTSTask, job_id: str) -> dict:
         # ── Step 4: Save audio ────────────────────────────────────────────────
         output_dir = Path(settings.AUDIO_OUTPUT_DIR)
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{job_id}.{result.format}"
-        output_path.write_bytes(result.audio_bytes)
+        output_path = output_dir / f"{job_id}.{audio_format}"
+        output_path.write_bytes(audio_bytes)
+
+        # Transcode to requested output format if different from generated format
+        output_format = params.get("output_format", "wav")
+        if output_format != "wav" and output_format != audio_format:
+            import subprocess
+
+            codec_map = {"mp3": "libmp3lame", "ogg": "libvorbis"}
+            codec = codec_map.get(output_format)
+            if codec:
+                target_path = output_dir / f"{job_id}.{output_format}"
+                result = subprocess.run(
+                    ["ffmpeg", "-y", "-i", str(output_path), "-codec:a", codec, str(target_path)],
+                    capture_output=True,
+                    timeout=120,
+                )
+                if result.returncode == 0:
+                    output_path.unlink(missing_ok=True)
+                    output_path = target_path
+                    audio_format = output_format
 
         processing_time_ms = int((time.monotonic() - t_start) * 1000)
 
         # ── Step 5: Update DB ─────────────────────────────────────────────────
         job.status = JobStatus.COMPLETE
         job.output_path = str(output_path)
-        job.duration_seconds = result.duration_seconds
+        job.duration_seconds = duration_seconds
         job.processing_time_ms = processing_time_ms
         job.completed_at = datetime.now(UTC)
         db.commit()
@@ -175,7 +245,7 @@ def generate_tts(self: TTSTask, job_id: str) -> dict:
                 "type": "complete",
                 "job_id": job_id,
                 "audio_url": f"/api/tts/jobs/{job_id}/audio",
-                "duration": result.duration_seconds,
+                "duration": duration_seconds,
                 "processing_ms": processing_time_ms,
             },
         )
@@ -183,7 +253,7 @@ def generate_tts(self: TTSTask, job_id: str) -> dict:
         logger.info(
             "Job %s complete: %.1fs audio in %dms (model=%s)",
             job_id,
-            result.duration_seconds,
+            duration_seconds,
             processing_time_ms,
             job.model_id,
         )
@@ -242,10 +312,14 @@ def clone_voice(self: TTSTask, voice_profile_id: str) -> dict:
         if not model.supports_voice_cloning:
             raise ValueError(f"Model {profile.model_id} does not support voice cloning")
 
-        metadata = model.clone_voice(
-            audio_path=profile.reference_audio_path,
-            name=profile.name,
-        )
+        self.manager.mark_in_use()
+        try:
+            metadata = model.clone_voice(
+                audio_path=profile.reference_audio_path,
+                name=profile.name,
+            )
+        finally:
+            self.manager.mark_done()
 
         profile.extra_info = metadata
         if "embedding_path" in metadata:
@@ -258,4 +332,8 @@ def clone_voice(self: TTSTask, voice_profile_id: str) -> dict:
         logger.exception("Voice cloning failed for %s", voice_profile_id)
         raise
     finally:
+        try:
+            self.manager.unload_all()
+        except Exception:
+            logger.debug("unload_all failed in clone_voice finally (non-fatal)")
         db.close()

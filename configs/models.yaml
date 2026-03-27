@@ -34,6 +34,7 @@ models:
     hf_repo: hexgrad/Kokoro-82M
     vram_gb: 0.5
     priority: 3
+    standby: true  # keep loaded between requests (< 0.5 GB VRAM)
     description: Kokoro 82M — fast, lightweight, 50+ preset voices
 
   qwen3-tts:
@@ -43,3 +44,51 @@ models:
     vram_gb: 10.0
     priority: 4
     description: Qwen3 TTS — large multilingual model
+
+  f5-tts:
+    enabled: true
+    class: app.models.f5_tts.F5TTSModel
+    hf_repo: SWivid/F5-TTS
+    vram_gb: 3.0
+    priority: 5
+    description: F5-TTS — flow matching, zero-shot cloning, 15x realtime speed, MIT license
+
+  chatterbox:
+    enabled: true
+    class: app.models.chatterbox.ChatterboxModel
+    hf_repo: ResembleAI/chatterbox
+    vram_gb: 5.0
+    priority: 5
+    description: Resemble AI Chatterbox — emotion exaggeration control, zero-shot cloning, MIT license
+
+  orpheus-3b:
+    enabled: true  # Runs on dedicated worker-orpheus container
+    class: app.models.orpheus.OrpheusTTSModel
+    hf_repo: canopylabs/orpheus-3b-0.1-ft
+    vram_gb: 7.0
+    priority: 5
+    description: Canopy Labs Orpheus 3B — Llama-based, emotion/intonation tags, ~200ms latency
+
+  cosyvoice-2:
+    enabled: true
+    class: app.models.cosyvoice.CosyVoice2Model
+    hf_repo: FunAudioLLM/CosyVoice2-0.5B
+    vram_gb: 5.0
+    priority: 5
+    description: FunAudioLLM CosyVoice 2.0 — 150ms latency, zero-shot cloning, voice design via text
+
+  parler-tts:
+    enabled: true
+    class: app.models.parler_tts.ParlerTTSModel
+    hf_repo: parler-tts/parler-tts-mini-v1
+    vram_gb: 3.0
+    priority: 5
+    description: Parler TTS Mini — describe any voice in natural language, no reference audio needed
+
+  dia-1b:
+    enabled: true  # Runs on dedicated worker-dia container
+    class: app.models.dia_tts.DiaTTSModel
+    hf_repo: nari-labs/Dia-1.6B-0626
+    vram_gb: 10.0
+    priority: 5
+    description: Nari Labs Dia 1.6B — dialogue generation with [S1]/[S2] speaker tags and nonverbal sounds

@@ -1,0 +1,31 @@
+# Orpheus 3B worker — Llama-based TTS with emotion tags
+# Listens on the `tts.orpheus` Celery queue.
+#
+# Build base first:
+#   docker build --network=host -t open_speakers-gpu-base:latest \
+#     -f Dockerfile.base-gpu .
+
+FROM open_speakers-gpu-base:latest
+
+WORKDIR /app
+
+# Orpheus TTS — orpheus-speech provides local inference with OrpheusModel
+# (orpheus-tts is just the cloud API client)
+RUN pip install --no-cache-dir orpheus-speech
+
+# OpenSpeakers backend deps
+RUN pip install --no-cache-dir \
+    "celery>=5.4.0" \
+    "redis>=5.0.0" \
+    "sqlalchemy>=2.0.30" \
+    "alembic>=1.13.0" \
+    "psycopg2-binary>=2.9.9" \
+    "pydantic>=2.6.0" \
+    "pydantic-settings>=2.3.0" \
+    "python-dotenv>=1.0.0" \
+    "fastapi>=0.115.0"
+
+# Application code
+COPY . .
+
+RUN mkdir -p /app/audio_output

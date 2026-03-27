@@ -15,6 +15,7 @@ class GenerateRequest(BaseModel):
     speed: float = Field(1.0, ge=0.5, le=2.0)
     pitch: float = Field(0.0, ge=-12.0, le=12.0)
     language: str = Field("en", description="BCP-47 language code")
+    output_format: str = Field("wav", pattern="^(wav|mp3|ogg)$")
     extra: dict = Field(default_factory=dict, description="Model-specific parameters")
 
 
@@ -38,6 +39,8 @@ class JobResponse(BaseModel):
     processing_time_ms: int | None
     created_at: datetime
     completed_at: datetime | None
+    batch_id: uuid.UUID | None = None
+    celery_task_id: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -47,3 +50,26 @@ class JobListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class BatchGenerateRequest(BaseModel):
+    lines: list[str] = Field(..., min_length=1, max_length=100)
+    model_id: str
+    voice_id: str | None = None
+    language: str = "en"
+    speed: float = Field(1.0, ge=0.5, le=2.0)
+    output_format: str = Field("wav", pattern="^(wav|mp3|ogg)$")
+    extra: dict = Field(default_factory=dict)
+
+
+class BatchGenerateResponse(BaseModel):
+    batch_id: uuid.UUID
+    job_ids: list[uuid.UUID]
+    total: int
+
+
+class BatchStatusResponse(BaseModel):
+    batch_id: uuid.UUID
+    total: int
+    status_counts: dict[str, int]
+    jobs: list[JobResponse]

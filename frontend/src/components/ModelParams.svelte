@@ -1,13 +1,19 @@
 <!-- Per-model parameter controls -->
 <script lang="ts">
+  import type { ModelInfo } from '$api/models';
+
   let {
     modelId = '',
     disabled = false,
     extras = $bindable({}),
+    model = undefined,
+    onInsertTag = undefined,
   }: {
     modelId?: string;
     disabled?: boolean;
     extras?: Record<string, unknown>;
+    model?: ModelInfo;
+    onInsertTag?: (tag: string) => void;
   } = $props();
 
   // VibeVoice 0.5B defaults
@@ -15,12 +21,19 @@
   let ddpmSteps = $state(5);
   // VibeVoice 1.5B defaults
   let cfgScale1p5b = $state(3.0);
+  let speakerId = $state(0);
   // Fish Speech defaults
   let temperature = $state(0.7);
   let topP = $state(0.8);
   let repPenalty = $state(1.1);
   // Qwen3 TTS
   let instruct = $state('');
+  // Chatterbox defaults
+  let exaggeration = $state(0.5);
+  let cfgWeight = $state(0.5);
+  // Orpheus defaults
+  let orpheusTemperature = $state(0.6);
+  let orpheusTopP = $state(0.95);
 
   // Reset all params to defaults when model changes
   $effect(() => {
@@ -28,10 +41,15 @@
     cfgScale = 1.5;
     ddpmSteps = 5;
     cfgScale1p5b = 3.0;
+    speakerId = 0;
     temperature = 0.7;
     topP = 0.8;
     repPenalty = 1.1;
     instruct = '';
+    exaggeration = 0.5;
+    cfgWeight = 0.5;
+    orpheusTemperature = 0.6;
+    orpheusTopP = 0.95;
   });
 
   // Sync extras from internal state
@@ -41,13 +59,19 @@
         extras = { cfg_scale: cfgScale, ddpm_steps: ddpmSteps };
         break;
       case 'vibevoice-1.5b':
-        extras = { cfg_scale: cfgScale1p5b };
+        extras = { cfg_scale: cfgScale1p5b, speaker_id: speakerId };
         break;
       case 'fish-speech-s2':
         extras = { temperature, top_p: topP, repetition_penalty: repPenalty };
         break;
       case 'qwen3-tts':
         extras = instruct ? { instruct } : {};
+        break;
+      case 'chatterbox':
+        extras = { exaggeration, cfg_weight: cfgWeight };
+        break;
+      case 'orpheus-3b':
+        extras = { temperature: orpheusTemperature, top_p: orpheusTopP };
         break;
       default:
         extras = {};
@@ -141,6 +165,26 @@
     />
     <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
       How closely the output follows the voice reference
+    </p>
+  </div>
+
+  <!-- Speaker ID selector -->
+  <div class="mt-3">
+    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for="speaker-id">
+      Speaker ID
+      <span class="text-xs text-gray-500 ml-1">(multi-speaker)</span>
+    </label>
+    <select
+      id="speaker-id"
+      bind:value={speakerId}
+      {disabled}
+      class="input"
+    >
+      <option value={0}>Speaker 0 (default)</option>
+      <option value={1}>Speaker 1</option>
+    </select>
+    <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
+      Prefix text with "Speaker 0: " or "Speaker 1: " to assign dialogue to different speakers.
     </p>
   </div>
 
@@ -242,6 +286,20 @@
       Tip: Add emotion tags in your text: [happy], [sad], [angry], [whisper], [excited]
     </p>
   </div>
+
+  <!-- Emotion tag quick-insert (Fish S2-Pro) -->
+  <div class="mt-3">
+    <p class="text-xs text-gray-400 dark:text-gray-400 mb-1">Emotion tags (click to insert into text):</p>
+    <div class="flex flex-wrap gap-1">
+      {#each ['[whisper]', '[excited]', '[angry]', '[sad]', '[laughs]', '[sighs]', '[breathes heavily]'] as tag}
+        <button
+          type="button"
+          class="text-xs px-2 py-0.5 rounded bg-gray-700 hover:bg-primary-600 transition-colors font-mono cursor-pointer"
+          onclick={() => onInsertTag?.(tag)}
+        >{tag}</button>
+      {/each}
+    </div>
+  </div>
 {/if}
 
 <!-- Qwen3 TTS -->
@@ -266,5 +324,232 @@
     <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
       Describe how the voice should sound &mdash; leave empty for a natural tone
     </p>
+
+    <!-- Example prompts quick-fill -->
+    <select
+      class="input mt-2 text-sm"
+      onchange={(e) => {
+        if (e.currentTarget.value) {
+          instruct = e.currentTarget.value;
+          e.currentTarget.value = '';
+        }
+      }}
+    >
+      <option value="">— Insert example style —</option>
+      <option value="Speak in a warm, friendly tone">Warm and friendly</option>
+      <option value="Speak excitedly with high energy">Excited</option>
+      <option value="Speak slowly and clearly, with careful enunciation">Slow and clear</option>
+      <option value="Speak softly and gently, almost whispering">Gentle whisper</option>
+      <option value="Speak with a serious, authoritative tone">Authoritative</option>
+    </select>
+  </div>
+{/if}
+
+<!-- Chatterbox -->
+{#if modelId === 'chatterbox'}
+  <div class="grid grid-cols-2 gap-4">
+    <!-- Exaggeration -->
+    <div>
+      <label class="label" for="chatterbox-exaggeration">
+        Exaggeration: {exaggeration.toFixed(2)}
+        {#if exaggeration === 0.5}<span class="label-hint">(default)</span>{/if}
+        <span
+          class="label-hint cursor-help"
+          title="Controls emotion exaggeration. Lower = neutral, Higher = more expressive."
+        >&#9432;</span>
+      </label>
+      <input
+        id="chatterbox-exaggeration"
+        type="range"
+        min="0.0"
+        max="1.0"
+        step="0.05"
+        bind:value={exaggeration}
+        {disabled}
+        class="w-full"
+      />
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+        Emotion exaggeration level
+      </p>
+    </div>
+
+    <!-- CFG Weight -->
+    <div>
+      <label class="label" for="chatterbox-cfg">
+        CFG Weight: {cfgWeight.toFixed(2)}
+        {#if cfgWeight === 0.5}<span class="label-hint">(default)</span>{/if}
+        <span
+          class="label-hint cursor-help"
+          title="Controls pacing and adherence. Lower = more natural pacing, Higher = more controlled."
+        >&#9432;</span>
+      </label>
+      <input
+        id="chatterbox-cfg"
+        type="range"
+        min="0.0"
+        max="1.0"
+        step="0.05"
+        bind:value={cfgWeight}
+        {disabled}
+        class="w-full"
+      />
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+        Pacing / style control
+      </p>
+    </div>
+  </div>
+
+  <!-- Emotion tag helpers for Chatterbox -->
+  <div class="mt-3">
+    <p class="text-xs text-gray-400 dark:text-gray-400 mb-1">Paralinguistic tags (click to insert into text):</p>
+    <div class="flex flex-wrap gap-1">
+      {#each ['[laugh]', '[cough]', '[sigh]', '[gasp]'] as tag}
+        <button
+          type="button"
+          class="text-xs px-2 py-0.5 rounded bg-gray-700 hover:bg-primary-600 transition-colors font-mono cursor-pointer"
+          onclick={() => onInsertTag?.(tag)}
+        >{tag}</button>
+      {/each}
+    </div>
+  </div>
+{/if}
+
+<!-- Orpheus 3B -->
+{#if modelId === 'orpheus-3b'}
+  <div class="grid grid-cols-2 gap-4">
+    <!-- Temperature -->
+    <div>
+      <label class="label" for="orpheus-temperature">
+        Temperature: {orpheusTemperature.toFixed(2)}
+        {#if orpheusTemperature === 0.6}<span class="label-hint">(default)</span>{/if}
+        <span
+          class="label-hint cursor-help"
+          title="Controls randomness and expressiveness. 0.6 is a good balance."
+        >&#9432;</span>
+      </label>
+      <input
+        id="orpheus-temperature"
+        type="range"
+        min="0.0"
+        max="1.0"
+        step="0.05"
+        bind:value={orpheusTemperature}
+        {disabled}
+        class="w-full"
+      />
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+        Speech variation and expressiveness
+      </p>
+    </div>
+
+    <!-- Top-p -->
+    <div>
+      <label class="label" for="orpheus-top-p">
+        Top-p: {orpheusTopP.toFixed(2)}
+        {#if orpheusTopP === 0.95}<span class="label-hint">(default)</span>{/if}
+        <span
+          class="label-hint cursor-help"
+          title="Nucleus sampling parameter. Higher = more diverse outputs."
+        >&#9432;</span>
+      </label>
+      <input
+        id="orpheus-top-p"
+        type="range"
+        min="0.0"
+        max="1.0"
+        step="0.05"
+        bind:value={orpheusTopP}
+        {disabled}
+        class="w-full"
+      />
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+        Token selection diversity
+      </p>
+    </div>
+  </div>
+
+  <!-- Emotion tag helpers for Orpheus -->
+  <div class="mt-3">
+    <p class="text-xs text-gray-400 dark:text-gray-400 mb-1">Emotion tags (click to insert into text):</p>
+    <div class="flex flex-wrap gap-1">
+      {#each ['<laugh>', '<chuckle>', '<sigh>', '<cough>', '<sniffle>', '<groan>', '<yawn>', '<gasp>'] as tag}
+        <button
+          type="button"
+          class="text-xs px-2 py-0.5 rounded bg-gray-700 hover:bg-primary-600 transition-colors font-mono cursor-pointer"
+          onclick={() => onInsertTag?.(tag)}
+        >{tag}</button>
+      {/each}
+    </div>
+  </div>
+{/if}
+
+<!-- Dia 1.6B -->
+{#if modelId === 'dia-1b'}
+  <div class="flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-xs text-blue-700 dark:text-blue-300">
+    <svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+    <div class="space-y-1">
+      <p class="font-medium">Dialogue mode: Use [S1] and [S2] speaker tags</p>
+      <p>Example: <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded font-mono">[S1] Hello there! [S2] How are you? [S1] I'm doing great!</code></p>
+      <p>Nonverbal sounds: <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded font-mono">(laughs)</code> <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded font-mono">(sighs)</code> <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded font-mono">(coughs)</code> <code class="bg-blue-100 dark:bg-blue-900/40 px-1 rounded font-mono">(whispers)</code></p>
+    </div>
+  </div>
+
+  <!-- Nonverbal sound chips for Dia -->
+  <div class="mt-3">
+    <p class="text-xs text-gray-400 dark:text-gray-400 mb-1">Nonverbal sounds (click to insert):</p>
+    <div class="flex flex-wrap gap-1">
+      {#each ['[S1] ', '[S2] ', '(laughs)', '(sighs)', '(coughs)', '(clears throat)', '(whispers)'] as tag}
+        <button
+          type="button"
+          class="text-xs px-2 py-0.5 rounded bg-gray-700 hover:bg-primary-600 transition-colors font-mono cursor-pointer"
+          onclick={() => onInsertTag?.(tag)}
+        >{tag}</button>
+      {/each}
+    </div>
+  </div>
+{/if}
+
+<!-- Parler TTS -->
+{#if modelId === 'parler-tts'}
+  <div>
+    <label class="label" for="parler-description">
+      Voice Description
+      <span
+        class="label-hint cursor-help"
+        title="Parler TTS generates a voice based on a text description — no reference audio needed."
+      >&#9432;</span>
+    </label>
+    <textarea
+      id="parler-description"
+      bind:value={extras.description as string}
+      {disabled}
+      rows={3}
+      maxlength={400}
+      placeholder="Describe the speaker's voice, e.g. 'A female speaker with a slightly expressive voice delivers a clear, engaging speech at a moderate pace in a quiet room.'"
+      class="input resize-none"
+    ></textarea>
+    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+      Describe the speaker's voice — no reference audio needed
+    </p>
+
+    <!-- Example prompts quick-fill -->
+    <select
+      class="input mt-2 text-sm"
+      onchange={(e) => {
+        if (e.currentTarget.value) {
+          extras = { ...extras, description: e.currentTarget.value };
+          e.currentTarget.value = '';
+        }
+      }}
+    >
+      <option value="">— Insert example description —</option>
+      <option value="A female speaker with a warm, expressive voice speaking clearly at a moderate pace in a quiet studio.">Warm female voice</option>
+      <option value="A deep male voice, slightly gravelly, speaking slowly in a quiet studio.">Deep male voice</option>
+      <option value="A young energetic female voice speaking fast with excitement.">Energetic female</option>
+      <option value="An older male voice with a calm, authoritative tone reading at a measured pace.">Authoritative male</option>
+      <option value="A child's voice speaking clearly and cheerfully at a moderate pace.">Child's voice</option>
+    </select>
   </div>
 {/if}

@@ -7,7 +7,15 @@ export interface VoiceProfile {
   reference_audio_path: string;
   embedding_path: string | null;
   metadata: Record<string, unknown> | null;
+  description?: string;
+  tags?: string[];
   created_at: string;
+}
+
+export interface VoiceProfileUpdate {
+  name?: string;
+  description?: string;
+  tags?: string[];
 }
 
 export interface VoiceListResponse {
@@ -30,6 +38,11 @@ export async function listVoices(modelId?: string): Promise<VoiceListResponse> {
   return res.data;
 }
 
+export async function getVoice(voiceId: string): Promise<VoiceProfile> {
+  const { data } = await axiosInstance.get<VoiceProfile>(`/voices/${voiceId}`);
+  return data;
+}
+
 export async function createVoiceProfile(
   name: string,
   modelId: string,
@@ -45,6 +58,11 @@ export async function createVoiceProfile(
   return res.data;
 }
 
+export async function updateVoice(voiceId: string, update: VoiceProfileUpdate): Promise<VoiceProfile> {
+  const { data } = await axiosInstance.patch<VoiceProfile>(`/voices/${voiceId}`, update);
+  return data;
+}
+
 export async function deleteVoiceProfile(voiceId: string): Promise<void> {
   await axiosInstance.delete(`/voices/${voiceId}`);
 }
@@ -52,4 +70,8 @@ export async function deleteVoiceProfile(voiceId: string): Promise<void> {
 export async function listBuiltinVoices(modelId: string): Promise<BuiltinVoice[]> {
   const res = await axiosInstance.get<BuiltinVoice[]>(`/voices/builtin/${modelId}`);
   return res.data;
+}
+
+export function getVoiceAudioUrl(voiceId: string): string {
+  return `/api/voices/${voiceId}/audio`;
 }

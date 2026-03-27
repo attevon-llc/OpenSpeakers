@@ -16,6 +16,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     espeak-ng \
     libsox-dev \
+    cmake \
+    make \
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # ── OpenSpeakers backend deps (celery, DB, API framework) ──────────────────
@@ -36,6 +40,11 @@ RUN pip install --no-cache-dir \
     "python-dotenv>=1.0.0"
 
 # ── Kokoro TTS (82M — fast, < 1 GB VRAM, preset voices) ───────────────────
+# Install pyopenjtalk prebuilt wheel first to avoid cmake build from source.
+# misaki[ja] pulls in pyopenjtalk which requires cmake if built from source.
+RUN pip install --no-cache-dir \
+        "pyopenjtalk-prebuilt" || \
+    pip install --no-cache-dir "pyopenjtalk"
 RUN pip install --no-cache-dir "kokoro>=0.9.2" "misaki[ja]" "misaki[zh]" && \
     python -m spacy download en_core_web_sm
 
@@ -56,10 +65,20 @@ RUN pip install --no-cache-dir --no-deps \
 RUN pip install --no-cache-dir --no-deps "qwen-tts>=0.1.1" && \
     pip install --no-cache-dir "vector_quantize_pytorch"
 
+# ── Parler TTS Mini ───────────────────────────────────────────────────────
+# Install with --no-deps to avoid downgrading transformers (parler-tts pins
+# an older version but works fine with the newer transformers already installed).
+RUN pip install --no-cache-dir --no-deps "parler-tts" && \
+    pip install --no-cache-dir "sentencepiece"
+
 # ── Application code ───────────────────────────────────────────────────────
 # Copy OpenSpeakers backend code (overrides /app from base image)
 COPY . .
 
-RUN mkdir -p /app/audio_output && chown -R 1000:1000 /app/audio_output
+RUN mkdir -p /app/audio_output /home/appuser/.cache && \
+    chown -R 1000:1000 /app/audio_output /home/appuser
+
+ENV HOME=/home/appuser
+ENV HF_HOME=/home/appuser/.cache/huggingface
 
 USER 1000

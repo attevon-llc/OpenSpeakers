@@ -56,9 +56,12 @@ class TTSModelBase(ABC):
     description: str = ""
     supports_voice_cloning: bool = False
     supports_streaming: bool = False
+    supports_speed: bool = False  # True = speed param is actively used
+    supports_pitch: bool = False  # True = pitch param is actively used
     supported_languages: list[str] = ["en"]
     hf_repo: str = ""
     vram_gb_estimate: float = 4.0
+    standby: bool = False  # True = keep loaded between requests
 
     _loaded: bool = False
 
@@ -76,6 +79,15 @@ class TTSModelBase(ABC):
 
         Must be called only while the model is loaded.
         """
+
+    def stream_generate(self, request: GenerateRequest):
+        """Yield raw PCM16 audio bytes as they are generated.
+
+        Only available when supports_streaming is True.
+        Each yielded value is a bytes object containing 16-bit signed PCM samples
+        at the model's native sample rate (24000 Hz).
+        """
+        raise NotImplementedError(f"{self.model_id} does not support streaming generation")
 
     def clone_voice(self, audio_path: str, _name: str) -> dict:
         """Create a voice profile from reference audio.
@@ -97,8 +109,11 @@ class TTSModelBase(ABC):
             "description": self.description,
             "supports_voice_cloning": self.supports_voice_cloning,
             "supports_streaming": self.supports_streaming,
+            "supports_speed": self.supports_speed,
+            "supports_pitch": self.supports_pitch,
             "supported_languages": self.supported_languages,
             "hf_repo": self.hf_repo,
             "vram_gb_estimate": self.vram_gb_estimate,
             "is_loaded": self.is_loaded,
+            "standby": self.standby,
         }

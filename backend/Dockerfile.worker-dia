@@ -1,0 +1,37 @@
+# Dia 1.6B worker — dialogue TTS with [S1]/[S2] speaker tags
+# Listens on the `tts.dia` Celery queue.
+#
+# Build base first:
+#   docker build --network=host -t open_speakers-gpu-base:latest \
+#     -f Dockerfile.base-gpu .
+
+FROM open_speakers-gpu-base:latest
+
+WORKDIR /app
+
+# Dia TTS from GitHub — installs its own torch from PyPI; reinstall cu128 after
+RUN pip install --no-cache-dir \
+    git+https://github.com/nari-labs/dia.git
+
+# Dia may have overwritten torch with a CPU/non-cu128 build; reinstate cu128 version
+RUN pip install --no-cache-dir \
+    "torch==2.10.0" "torchaudio==2.10.0" \
+    --index-url https://download.pytorch.org/whl/cu128 \
+    --force-reinstall --no-deps
+
+# OpenSpeakers backend deps
+RUN pip install --no-cache-dir \
+    "celery>=5.4.0" \
+    "redis>=5.0.0" \
+    "sqlalchemy>=2.0.30" \
+    "alembic>=1.13.0" \
+    "psycopg2-binary>=2.9.9" \
+    "pydantic>=2.6.0" \
+    "pydantic-settings>=2.3.0" \
+    "python-dotenv>=1.0.0" \
+    "fastapi>=0.115.0"
+
+# Application code
+COPY . .
+
+RUN mkdir -p /app/audio_output

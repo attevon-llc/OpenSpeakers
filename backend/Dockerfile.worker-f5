@@ -1,0 +1,58 @@
+# F5-TTS / Chatterbox / CosyVoice 2.0 / Parler TTS combined worker
+# Listens on the `tts.f5-tts` Celery queue.
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    ffmpeg \
+    libsndfile1 \
+    libpq-dev \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# PyTorch cu128
+RUN pip install --no-cache-dir \
+    torch torchaudio \
+    --index-url https://download.pytorch.org/whl/cu128
+
+# F5-TTS
+RUN pip install --no-cache-dir "f5-tts"
+
+# Chatterbox TTS
+RUN pip install --no-cache-dir "chatterbox-tts"
+
+# Parler TTS Mini
+RUN pip install --no-cache-dir "parler-tts"
+
+# CosyVoice 2.0 — install from GitHub
+RUN pip install --no-cache-dir \
+    git+https://github.com/FunAudioLLM/CosyVoice.git || \
+    echo "CosyVoice install failed (optional — install manually if needed)"
+
+# Audio processing
+RUN pip install --no-cache-dir \
+    soundfile \
+    numpy \
+    scipy
+
+# OpenSpeakers backend deps
+RUN pip install --no-cache-dir \
+    "celery>=5.4.0" \
+    "redis>=5.0.0" \
+    "sqlalchemy>=2.0.30" \
+    "alembic>=1.13.0" \
+    "psycopg2-binary>=2.9.9" \
+    "pydantic>=2.6.0" \
+    "pydantic-settings>=2.3.0" \
+    "python-dotenv>=1.0.0" \
+    "fastapi>=0.115.0"
+
+# Application code
+COPY . .
+
+RUN mkdir -p /app/audio_output

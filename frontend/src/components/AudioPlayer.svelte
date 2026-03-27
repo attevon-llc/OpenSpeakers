@@ -1,54 +1,115 @@
 <script lang="ts">
+  import type WaveSurferType from 'wavesurfer.js';
+  import { onMount } from 'svelte';
+  import { theme } from '$stores/theme';
+
   let {
     src = '',
     duration = null,
-    disabled = false
+    disabled = false,
+    autoplay = false,
   }: {
     src?: string;
     duration?: number | null;
     disabled?: boolean;
+    autoplay?: boolean;
   } = $props();
 
-  let audio: HTMLAudioElement | undefined = $state();
-  let paused = $state(true);
+  let container = $state<HTMLElement | undefined>(undefined);
+  let ws: WaveSurferType | null = null;
+  let WaveSurfer: typeof import('wavesurfer.js').default | null = null;
+  let playing = $state(false);
   let currentTime = $state(0);
-  let totalDuration = $state(0);
-  let volume = $state(1);
+  let wsDuration = $state(0);
+  let ready = $state(false);
 
-  let playing = $derived(!paused);
-  let progress = $derived(totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0);
+  const waveColors = {
+    dark: { wave: '#6366f1', progress: '#a5b4fc', cursor: '#e0e7ff' },
+    light: { wave: '#4f46e5', progress: '#818cf8', cursor: '#3730a3' },
+  };
 
+  onMount(async () => {
+    const module = await import('wavesurfer.js');
+    WaveSurfer = module.default;
+    if (src) initWaveSurfer();
+  });
+
+  // Cleanup wavesurfer on component teardown (Svelte 5 $effect cleanup pattern)
   $effect(() => {
-    if (src && audio) {
-      audio.load();
-      paused = true;
-      currentTime = 0;
+    return () => {
+      ws?.destroy();
+      ws = null;
+    };
+  });
+
+  function initWaveSurfer(): void {
+    if (!container || !src || !WaveSurfer) return;
+    ws?.destroy();
+    ready = false;
+    playing = false;
+    currentTime = 0;
+    wsDuration = 0;
+
+    const colors = waveColors[theme()] ?? waveColors.dark;
+    ws = WaveSurfer.create({
+      container,
+      waveColor: colors.wave,
+      progressColor: colors.progress,
+      cursorColor: colors.cursor,
+      height: 64,
+      normalize: true,
+      url: src,
+    });
+
+    ws.on('ready', (d: number) => {
+      wsDuration = d;
+      ready = true;
+      if (autoplay) ws?.play();
+    });
+    ws.on('timeupdate', (t: number) => { currentTime = t; });
+    ws.on('play', () => { playing = true; });
+    ws.on('pause', () => { playing = false; });
+    ws.on('finish', () => { playing = false; currentTime = 0; });
+  }
+
+  // Re-init when src changes
+  $effect(() => {
+    const currentSrc = src;
+    if (currentSrc && container) {
+      initWaveSurfer();
     }
   });
 
+  // Update waveform colors when theme changes
+  $effect(() => {
+    const colors = waveColors[theme()] ?? waveColors.dark;
+    ws?.setOptions({
+      waveColor: colors.wave,
+      progressColor: colors.progress,
+      cursorColor: colors.cursor,
+    });
+  });
+
   function toggle(): void {
-    if (!audio || !src) return;
-    if (playing) {
-      audio.pause();
-    } else {
-      audio.play();
-    }
+    if (!ws || !src || disabled) return;
+    ws.playPause();
   }
 
-  function seek(e: MouseEvent): void {
-    if (!audio || !totalDuration) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const pct = x / rect.width;
-    audio.currentTime = pct * totalDuration;
+  function seek(seconds: number): void {
+    if (!ws || wsDuration === 0) return;
+    const newTime = Math.max(0, Math.min(wsDuration, currentTime + seconds));
+    ws.seekTo(newTime / wsDuration);
   }
 
-  function seekKeydown(e: KeyboardEvent): void {
-    if (!audio || !totalDuration) return;
-    if (e.key === 'ArrowRight') { e.preventDefault(); audio.currentTime = Math.min(totalDuration, currentTime + 5); }
-    else if (e.key === 'ArrowLeft') { e.preventDefault(); audio.currentTime = Math.max(0, currentTime - 5); }
-    else if (e.key === 'Home') { e.preventDefault(); audio.currentTime = 0; }
-    else if (e.key === 'End') { e.preventDefault(); audio.currentTime = totalDuration; }
+  function seekToStart(): void { ws?.seekTo(0); }
+  function seekToEnd(): void { ws?.seekTo(1); }
+
+  function handleKeydown(e: KeyboardEvent): void {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); seek(-5); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); seek(5); }
+    else if (e.key === 'Home') { e.preventDefault(); seekToStart(); }
+    else if (e.key === 'End') { e.preventDefault(); seekToEnd(); }
+    else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); }
   }
 
   function formatTime(s: number): string {
@@ -56,30 +117,30 @@
     const sec = Math.floor(s % 60);
     return `${m}:${sec.toString().padStart(2, '0')}`;
   }
+
+  let displayDuration = $derived(duration ?? wsDuration);
 </script>
 
 <div class="space-y-2">
   {#if src}
-    <!-- svelte-ignore a11y_media_has_caption -->
-    <audio
-      bind:this={audio}
-      bind:currentTime
-      bind:duration={totalDuration}
-      bind:paused
-      onplay={() => (paused = false)}
-      onpause={() => (paused = true)}
-      onended={() => (paused = true)}
-      preload="metadata"
-    >
-      <source {src} type="audio/wav" />
-    </audio>
+    <!-- WaveSurfer container -->
+    <div
+      bind:this={container}
+      class="w-full rounded-lg overflow-hidden cursor-pointer
+             {!ready ? 'opacity-50' : ''}"
+      role="presentation"
+      onkeydown={handleKeydown}
+      tabindex={-1}
+    ></div>
 
     <div class="flex items-center gap-3">
       <!-- Play/Pause button -->
       <button
         onclick={toggle}
+        {disabled}
         class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full
-               bg-primary-600 hover:bg-primary-700 text-white transition-colors"
+               bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed
+               text-white transition-colors"
         aria-label={playing ? 'Pause' : 'Play'}
       >
         {#if playing}
@@ -95,35 +156,30 @@
         {/if}
       </button>
 
-      <!-- Progress bar -->
-      <div class="flex-1 group">
-        <div
-          class="relative h-1.5 bg-gray-200 dark:bg-gray-600 rounded-full cursor-pointer"
-          onclick={seek}
-          onkeydown={seekKeydown}
-          role="slider"
-          aria-label="Seek"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(progress)}
-          tabindex="0"
-        >
-          <div
-            class="absolute inset-y-0 left-0 bg-primary-500 rounded-full transition-all"
-            style="width: {progress}%"
-          ></div>
-        </div>
+      <!-- Keyboard seek hint (accessible) -->
+      <div
+        class="flex-1 text-xs text-gray-500 dark:text-gray-500"
+        onkeydown={handleKeydown}
+        role="presentation"
+        tabindex={0}
+        aria-label="Audio controls: Space to play/pause, Arrow keys to seek ±5s, Home/End to jump"
+      >
+        {#if !ready && src}
+          <span class="text-xs text-gray-400 dark:text-gray-600">Loading waveform...</span>
+        {:else}
+          <span class="text-xs text-gray-500 dark:text-gray-600">Click waveform to seek · ←/→ ±5s · Space to play</span>
+        {/if}
       </div>
 
       <!-- Time -->
       <span class="text-xs text-gray-500 dark:text-gray-400 tabular-nums flex-shrink-0 w-16 text-right">
-        {formatTime(currentTime)} / {formatTime(duration ?? totalDuration)}
+        {formatTime(currentTime)} / {formatTime(displayDuration)}
       </span>
 
       <!-- Download -->
       <a
         href={src}
-        download="tts_output.wav"
+        download="tts_output"
         class="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
         aria-label="Download audio"
       >
@@ -137,7 +193,7 @@
     <!-- Placeholder state -->
     <div class="flex items-center gap-3 opacity-40">
       <div class="flex-shrink-0 w-9 h-9 rounded-full bg-gray-300 dark:bg-gray-600"></div>
-      <div class="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+      <div class="flex-1 h-16 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
       <span class="text-xs text-gray-400 w-16 text-right">0:00 / 0:00</span>
     </div>
   {/if}

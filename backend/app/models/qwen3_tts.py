@@ -74,6 +74,7 @@ class Qwen3TTSModel(TTSModelBase):
 
     def load(self, device: str = "cuda") -> None:
         import torch
+        from huggingface_hub import snapshot_download
         from qwen_tts import Qwen3TTSModel as QwenModel
 
         self._device = device
@@ -87,9 +88,17 @@ class Qwen3TTSModel(TTSModelBase):
             attn_impl = "sdpa"
             logger.info("flash-attn not available, using sdpa for Qwen3 TTS")
 
+        # Resolve local snapshot path — AutoProcessor.from_pretrained makes an API
+        # call when given a repo ID under HF_HUB_OFFLINE=1; using the local path bypasses it.
+        model_path = snapshot_download(
+            "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+            local_files_only=True,
+        )
+        logger.info("Qwen3 TTS model path: %s", model_path)
+
         # Load CustomVoice model (built-in speakers with style control)
         self._custom_voice_model = QwenModel.from_pretrained(
-            "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+            model_path,
             device_map=device,
             dtype=torch.bfloat16,
             attn_implementation=attn_impl,
@@ -183,8 +192,11 @@ class Qwen3TTSModel(TTSModelBase):
                 attn_impl = "sdpa"
 
             logger.info("Loading Qwen3 TTS Base model for voice cloning…")
+            from huggingface_hub import snapshot_download as _snap
+
+            base_path = _snap("Qwen/Qwen3-TTS-12Hz-1.7B-Base", local_files_only=True)
             self._clone_model = QwenModel.from_pretrained(
-                "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+                base_path,
                 device_map=self._device,
                 dtype=torch.bfloat16,
                 attn_implementation=attn_impl,

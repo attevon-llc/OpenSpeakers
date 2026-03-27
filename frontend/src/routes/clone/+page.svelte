@@ -3,15 +3,19 @@
   import { onMount } from 'svelte';
   import ModelSelector from '$components/ModelSelector.svelte';
   import AudioPlayer from '$components/AudioPlayer.svelte';
+  import WaveformPreview from '$components/WaveformPreview.svelte';
   import ErrorBanner from '$components/ErrorBanner.svelte';
   import { voiceCloningModels, refreshModels } from '$stores/models';
   import {
     createVoiceProfile,
     listVoices,
     deleteVoiceProfile,
+    updateVoice,
+    getVoiceAudioUrl,
     type VoiceProfile,
   } from '$api/voices';
   import { generateTTS, getAudioUrl, pollJob } from '$api/tts';
+  import { addToast } from '$lib/stores/toasts';
 
   // Form state
   let selectedModel = $state('');
@@ -20,6 +24,12 @@
   let referenceAudioPreview = $state('');
   let uploading = $state(false);
   let uploadError = $state('');
+  let isDragging = $state(false);
+  let fileInputEl: HTMLInputElement;
+
+  // Inline rename state
+  let editingVoiceId = $state<string | null>(null);
+  let editingName = $state('');
 
   // Saved voices
   let clonedVoices: VoiceProfile[] = $state([]);
@@ -55,8 +65,8 @@
   onMount(async () => {
     await refreshModels();
     // Default to first cloning-capable model
-    if ($voiceCloningModels.length > 0 && !selectedModel) {
-      selectedModel = $voiceCloningModels[0].id;
+    if (voiceCloningModels().length > 0 && !selectedModel) {
+      selectedModel = voiceCloningModels()[0].id;
     }
     await loadVoices();
   });
@@ -74,22 +84,37 @@
     }
   }
 
+  function handleFile(file: File | null | undefined): void {
+    if (!file) return;
+    uploadError = '';
+    if (file.size > 50 * 1024 * 1024) {
+      uploadError = 'File too large. Maximum size is 50 MB.';
+      referenceFile = null;
+      referenceAudioPreview = '';
+      return;
+    }
+    referenceFile = file;
+    referenceAudioPreview = URL.createObjectURL(file);
+  }
+
   function handleFileChange(e: Event): void {
     const input = e.currentTarget as HTMLInputElement;
-    const file = input.files?.[0] ?? null;
-    referenceFile = file;
-    uploadError = '';
-    if (file) {
-      // Validate file size (max 50 MB)
-      if (file.size > 50 * 1024 * 1024) {
-        uploadError = 'File too large. Maximum size is 50 MB.';
-        referenceFile = null;
-        referenceAudioPreview = '';
-        return;
-      }
-      referenceAudioPreview = URL.createObjectURL(file);
-    } else {
-      referenceAudioPreview = '';
+    handleFile(input.files?.[0]);
+  }
+
+  function startEdit(voice: VoiceProfile): void {
+    editingVoiceId = voice.id;
+    editingName = voice.name;
+  }
+
+  async function saveEdit(voiceId: string): Promise<void> {
+    try {
+      const updated = await updateVoice(voiceId, { name: editingName });
+      clonedVoices = clonedVoices.map((v) => (v.id === voiceId ? updated : v));
+      editingVoiceId = null;
+      addToast('success', 'Voice renamed');
+    } catch {
+      addToast('error', 'Failed to rename voice');
     }
   }
 
@@ -104,8 +129,10 @@
       voiceName = '';
       referenceFile = null;
       referenceAudioPreview = '';
+      addToast('success', `Voice "${profile.name}" created`);
     } catch (err) {
       uploadError = err instanceof Error ? err.message : 'Upload failed. Please try again.';
+      addToast('error', uploadError);
     } finally {
       uploading = false;
     }
@@ -115,14 +142,18 @@
     if (!confirm('Delete this voice profile? This cannot be undone.')) return;
     try {
       await deleteVoiceProfile(voiceId);
+      const deleted = clonedVoices.find((v) => v.id === voiceId);
       clonedVoices = clonedVoices.filter((v) => v.id !== voiceId);
       // Clear preview if the deleted voice was being previewed
       if (previewVoiceId === voiceId) {
         previewAudioUrl = '';
         previewVoiceId = null;
       }
+      addToast('info', `Voice "${deleted?.name ?? voiceId}" deleted`);
     } catch (err) {
-      uploadError = err instanceof Error ? err.message : 'Failed to delete voice profile';
+      const msg = err instanceof Error ? err.message : 'Failed to delete voice profile';
+      uploadError = msg;
+      addToast('error', msg);
     }
   }
 
@@ -226,33 +257,55 @@
       <div>
         <label class="label">Model</label>
         <ModelSelector
-          models={$voiceCloningModels}
+          models={voiceCloningModels()}
           bind:value={selectedModel}
           disabled={uploading}
         />
       </div>
     </div>
 
-    <!-- File upload -->
+    <!-- File upload — drag-and-drop zone -->
     <div>
-      <label class="label" for="ref-audio">
+      <label class="label">
         Reference audio
-        <span class="label-hint">(WAV / MP3 / FLAC, 5-30 sec recommended)</span>
+        <span class="label-hint">(WAV / MP3 / FLAC / M4A / OGG, 5-30 sec recommended)</span>
       </label>
-      <input
-        id="ref-audio"
-        type="file"
-        accept="audio/wav,audio/mpeg,audio/flac,audio/x-wav,audio/ogg"
-        onchange={handleFileChange}
-        disabled={uploading}
-        class="block w-full text-sm text-gray-500 dark:text-gray-400
-               file:mr-4 file:py-2 file:px-4
-               file:rounded-lg file:border-0 file:font-medium
-               file:bg-primary-50 file:text-primary-700
-               dark:file:bg-primary-900/30 dark:file:text-primary-400
-               hover:file:bg-primary-100 dark:hover:file:bg-primary-900/50
-               file:cursor-pointer file:transition-colors"
-      />
+      <div
+        class="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200"
+        class:border-primary-400={isDragging}
+        class:bg-primary-900={isDragging}
+        class:border-gray-600={!isDragging}
+        role="button"
+        tabindex="0"
+        aria-label="Upload reference audio file"
+        ondragover={(e) => { e.preventDefault(); isDragging = true; }}
+        ondragleave={() => { isDragging = false; }}
+        ondrop={(e) => { e.preventDefault(); isDragging = false; handleFile(e.dataTransfer?.files[0]); }}
+        onclick={() => fileInputEl.click()}
+        onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && fileInputEl.click()}
+      >
+        <input
+          bind:this={fileInputEl}
+          type="file"
+          class="hidden"
+          accept=".wav,.mp3,.flac,.ogg,.m4a,.aac,audio/wav,audio/mpeg,audio/flac,audio/ogg,audio/mp4,audio/x-m4a"
+          disabled={uploading}
+          onchange={handleFileChange}
+        />
+        {#if referenceFile}
+          <p class="font-medium text-white">{referenceFile.name}</p>
+          <p class="text-sm text-gray-400">{(referenceFile.size / 1024 / 1024).toFixed(2)} MB</p>
+          <p class="text-xs text-gray-500 mt-1">Click or drop to replace</p>
+        {:else}
+          <div class="text-gray-400">
+            <svg class="w-10 h-10 mx-auto mb-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <p class="text-base">Drop audio file here or click to browse</p>
+            <p class="text-xs mt-1 text-gray-500">WAV, MP3, FLAC, OGG, M4A · Max 50 MB</p>
+          </div>
+        {/if}
+      </div>
     </div>
 
     <!-- File info -->
@@ -389,10 +442,10 @@
             <!-- Voice icon -->
             <div
               class="mt-0.5 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center
-                     bg-purple-100 dark:bg-purple-500/15"
+                     bg-teal-100 dark:bg-teal-500/15"
             >
               <svg
-                class="w-4 h-4 text-purple-600 dark:text-purple-400"
+                class="w-4 h-4 text-teal-600 dark:text-teal-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -408,10 +461,39 @@
 
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
-                <p class="font-medium text-sm text-gray-900 dark:text-gray-100 truncate" title={voice.name}>{voice.name}</p>
+                {#if editingVoiceId === voice.id}
+                  <input
+                    type="text"
+                    bind:value={editingName}
+                    class="input text-sm py-0.5 px-2 w-40"
+                    onblur={() => saveEdit(voice.id)}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter') saveEdit(voice.id);
+                      if (e.key === 'Escape') editingVoiceId = null;
+                    }}
+                    autofocus
+                  />
+                {:else}
+                  <span
+                    class="font-medium text-sm text-gray-900 dark:text-gray-100 truncate cursor-pointer hover:text-primary-400 transition-colors"
+                    title="Click to rename"
+                    onclick={() => startEdit(voice)}
+                  >{voice.name}</span>
+                  <button
+                    onclick={() => startEdit(voice)}
+                    class="text-gray-500 hover:text-primary-400 text-xs transition-colors"
+                    aria-label="Rename voice"
+                    title="Rename"
+                  >✏</button>
+                {/if}
                 <span class="badge-available">{voice.model_id}</span>
               </div>
               <p class="text-xs text-gray-400 mt-0.5">{formatDate(voice.created_at)}</p>
+
+              <!-- Reference audio waveform preview -->
+              <div class="mt-2">
+                <WaveformPreview src={getVoiceAudioUrl(voice.id)} height={40} />
+              </div>
 
               <!-- Preview player -->
               {#if voice.id === previewVoiceId && previewAudioUrl}

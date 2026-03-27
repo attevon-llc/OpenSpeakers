@@ -1,25 +1,14 @@
 # open_speakers worker-fish — Fish Speech inference container
 # Separate from the main worker because fish-speech needs its own CUDA build.
 # Listens on the `tts.fish-speech` Celery queue.
+#
+# Build base first:
+#   docker build --network=host -t open_speakers-gpu-base:latest \
+#     -f Dockerfile.base-gpu .
 
-FROM python:3.12-slim AS base
+FROM open_speakers-gpu-base:latest AS base
 
 WORKDIR /app
-
-# ── System dependencies ─────────────────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    ffmpeg \
-    libsndfile1 \
-    libpq-dev \
-    gcc \
-    portaudio19-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# ── PyTorch cu128 ───────────────────────────────────────────────────────────
-RUN pip install --no-cache-dir \
-    torch torchaudio \
-    --index-url https://download.pytorch.org/whl/cu128
 
 # ── Fish Speech from source ─────────────────────────────────────────────────
 # Install with --no-deps to skip pyaudio (not needed for inference, only mic input).
@@ -48,13 +37,9 @@ RUN pip install --no-cache-dir --no-deps -e . && \
 WORKDIR /app
 
 # ── Additional ML deps ──────────────────────────────────────────────────────
+# (torch, torchaudio, soundfile, numpy, scipy, librosa, accelerate already in base)
 RUN pip install --no-cache-dir \
-    transformers \
-    accelerate \
-    soundfile \
-    numpy \
-    scipy \
-    librosa
+    transformers
 
 # ── OpenSpeakers backend deps (celery, DB, API framework) ──────────────────
 RUN pip install --no-cache-dir \

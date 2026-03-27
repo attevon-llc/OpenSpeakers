@@ -20,8 +20,9 @@ services:
       dockerfile: Dockerfile.worker
     volumes:
       - ./backend:/app
-      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
-      - ${MODEL_CACHE_DIR:-./model_cache}/torch:/root/.cache/torch
+      - ./configs:/app/configs:ro
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/home/appuser/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./model_cache}/torch:/home/appuser/.cache/torch
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
       # VibeVoice custom fork — mounted for editable development
       - ${VIBEVOICE_REPO_PATH:-/mnt/nvm/repos/VibeVoice}:/opt/vibevoice
@@ -33,6 +34,15 @@ services:
       # Use local model paths instead of HuggingFace repo IDs
       - VIBEVOICE_MODEL_PATH=/models/vibevoice/VibeVoice-Realtime-0.5B
       - VIBEVOICE_1P5B_MODEL_PATH=/models/vibevoice/VibeVoice-1.5B
+      # HF cache must be accessible by UID 1000 (the worker runs as USER 1000)
+      - HF_HOME=/home/appuser/.cache/huggingface
+      - HOME=/home/appuser
+      # Prevent torch._dynamo cache init from calling getpwuid() on containers
+      # where the running UID has no /etc/passwd entry (PyTorch 2.6+)
+      - TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor_cache
+      - USER=appuser
+      # Use cached HF models only — avoids network timeouts in Docker
+      - HF_HUB_OFFLINE=1
 
   worker-fish:
     image: open_speakers-worker-fish:latest
@@ -41,6 +51,7 @@ services:
       dockerfile: Dockerfile.worker-fish
     volumes:
       - ./backend:/app
+      - ./configs:/app/configs:ro
       - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
       # NAS models — local model weights (avoid HuggingFace downloads)
@@ -52,6 +63,9 @@ services:
       - AUDIO_OUTPUT_DIR=/app/audio_output
       - FISH_SPEECH_MODEL_PATH=/models/fish-speech/s2-pro
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor_cache
+      - USER=appuser
+      - HF_HUB_OFFLINE=1
     command: >
       celery -A app.core.celery worker
       --loglevel=info -Q tts.fish-speech
@@ -65,6 +79,7 @@ services:
       dockerfile: Dockerfile.worker-qwen3
     volumes:
       - ./backend:/app
+      - ./configs:/app/configs:ro
       - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
       # NAS models — local model weights (avoid HuggingFace downloads)
@@ -74,11 +89,98 @@ services:
       - POSTGRES_HOST=postgres
       - REDIS_HOST=redis
       - AUDIO_OUTPUT_DIR=/app/audio_output
+      - TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor_cache
+      - USER=appuser
+      - HF_HUB_OFFLINE=1
     command: >
       celery -A app.core.celery worker
       --loglevel=info -Q tts.qwen3
       --pool=threads --concurrency=1
       --hostname qwen3-worker@%h -E
+
+  worker-f5:
+    image: open_speakers-worker-f5:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker-f5
+    volumes:
+      - ./backend:/app
+      - ./configs:/app/configs:ro
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+      - /mnt/nas/models:/models
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - AUDIO_OUTPUT_DIR=/app/audio_output
+      - TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor_cache
+      - USER=appuser
+      - HF_HUB_OFFLINE=1
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info -Q tts.f5-tts
+      --pool=threads --concurrency=1
+      --hostname f5-worker@%h -E
+
+  worker-orpheus:
+    image: open_speakers-worker-orpheus:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker-orpheus
+    volumes:
+      - ./backend:/app
+      - ./configs:/app/configs:ro
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+      - /mnt/nas/models:/models
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - AUDIO_OUTPUT_DIR=/app/audio_output
+      - TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor_cache
+      - USER=appuser
+      # Use cached HF models only — avoids httpx client crash in Celery threads
+      - HF_HUB_OFFLINE=1
+      # Required for CUDA visibility in python:3.12-slim based containers
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info -Q tts.orpheus
+      --pool=threads --concurrency=1
+      --hostname orpheus-worker@%h -E
+
+  worker-dia:
+    image: open_speakers-worker-dia:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker-dia
+    volumes:
+      - ./backend:/app
+      - ./configs:/app/configs:ro
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./model_cache}/dac:/root/.cache/descript/dac:ro
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+      - /mnt/nas/models:/models
+    environment:
+      - PYTHONPATH=/app
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - AUDIO_OUTPUT_DIR=/app/audio_output
+      - TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor_cache
+      - USER=appuser
+      # Use cached HF models only — avoids httpx client crash in Celery threads
+      - HF_HUB_OFFLINE=1
+      # Required for CUDA visibility in python:3.12-slim based containers
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info -Q tts.dia
+      --pool=threads --concurrency=1
+      --hostname dia-worker@%h -E
 
   frontend:
     image: open_speakers-frontend:latest

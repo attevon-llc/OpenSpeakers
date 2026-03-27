@@ -12,7 +12,7 @@
 export type ProgressStep = 'queued' | 'model_loading' | 'generating' | 'complete' | 'error';
 
 export interface ProgressEvent {
-  type: 'status' | 'progress' | 'complete' | 'error';
+  type: 'status' | 'progress' | 'complete' | 'error' | 'audio_chunk';
   step?: ProgressStep;
   status?: string;
   detail?: string;
@@ -22,6 +22,10 @@ export interface ProgressEvent {
   audio_url?: string;
   duration?: number;
   message?: string;
+  // Streaming audio chunk fields
+  chunk_data?: string;   // base64-encoded PCM16 samples
+  chunk_index?: number;
+  sample_rate?: number;
 }
 
 export type ProgressCallback = (event: ProgressEvent) => void;
@@ -32,6 +36,7 @@ export class JobProgressSocket {
   private onProgress: ProgressCallback;
   private reconnectAttempts = 0;
   private maxReconnects = 3;
+  private disconnected = false;
 
   constructor(jobId: string, onProgress: ProgressCallback) {
     this.jobId = jobId;
@@ -50,6 +55,7 @@ export class JobProgressSocket {
     };
 
     this.ws.onmessage = (event) => {
+      if (this.disconnected) return;
       try {
         const data = JSON.parse(event.data) as ProgressEvent;
         this.onProgress(data);
@@ -62,18 +68,20 @@ export class JobProgressSocket {
     };
 
     this.ws.onclose = (event) => {
+      if (this.disconnected) return;
       if (!event.wasClean && this.reconnectAttempts < this.maxReconnects) {
         this.reconnectAttempts++;
-        setTimeout(() => this.connect(), 1000 * this.reconnectAttempts);
+        setTimeout(() => { if (!this.disconnected) this.connect(); }, 1000 * this.reconnectAttempts);
       }
     };
 
     this.ws.onerror = () => {
-      this.onProgress({ type: 'error', message: 'WebSocket connection failed' });
+      // Silently ignore WS connection errors — pollJob fallback handles completion.
     };
   }
 
   disconnect(): void {
+    this.disconnected = true;
     if (this.ws) {
       this.ws.close();
       this.ws = null;

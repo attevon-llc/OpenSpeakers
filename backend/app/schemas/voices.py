@@ -17,10 +17,18 @@ class VoiceProfileResponse(BaseModel):
     model_id: str
     reference_audio_path: str
     embedding_path: str | None
-    metadata: dict | None
+    extra_info: dict | None
+    description: str | None = None
+    tags: list = Field(default_factory=list)
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class VoiceProfileUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=128)
+    description: str | None = None
+    tags: list[str] | None = None
 
 
 class VoiceListResponse(BaseModel):

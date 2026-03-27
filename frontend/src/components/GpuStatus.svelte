@@ -31,6 +31,7 @@
 
   let ws: WebSocket | null = null;
   let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let alive = true;
 
   // Derived GPU stats
   let vramUsedGb = $derived.by(() => {
@@ -68,6 +69,7 @@
     };
 
     ws.onmessage = (event) => {
+      if (!alive) return;
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'gpu_stats') {
@@ -80,11 +82,13 @@
     };
 
     ws.onclose = () => {
+      if (!alive) return;
       connected = false;
       startPolling();
     };
 
     ws.onerror = () => {
+      if (!alive) return;
       connected = false;
     };
   }
@@ -92,11 +96,12 @@
   async function fetchSystemInfo(): Promise<void> {
     try {
       const res = await axiosInstance.get('/system/info');
+      if (!alive) return;
       gpuInfo = res.data.gpu;
       currentModel = res.data.current_model;
       fetchError = false;
     } catch {
-      fetchError = true;
+      if (alive) fetchError = true;
     }
   }
 
@@ -106,6 +111,7 @@
   }
 
   function cleanup(): void {
+    alive = false;
     if (ws) {
       ws.close();
       ws = null;
