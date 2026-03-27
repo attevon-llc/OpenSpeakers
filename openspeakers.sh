@@ -1,6 +1,80 @@
 #!/bin/bash
+# =============================================================================
 # OpenSpeakers Management CLI
-# Usage: ./openspeakers.sh [command] [options]
+# =============================================================================
+#
+# A self-contained management script for all OpenSpeakers operations.
+# Run from the project root — it automatically cd's to the script directory.
+#
+# USAGE
+#   ./openspeakers.sh <command> [subcommand] [options]
+#
+# QUICK START
+#   ./openspeakers.sh start              # Start everything with GPU workers
+#   ./openspeakers.sh start dev          # Start core services only (no GPU)
+#   ./openspeakers.sh start build        # Build images then start (first run)
+#   ./openspeakers.sh stop               # Stop all services
+#   ./openspeakers.sh status             # Show container status
+#   ./openspeakers.sh health             # Health check all services
+#
+# SERVICE LOGS
+#   ./openspeakers.sh logs               # Tail all service logs
+#   ./openspeakers.sh logs backend       # Tail a specific service
+#   ./openspeakers.sh logs worker-fish   # Tail Fish Speech worker
+#   ./openspeakers.sh restart backend    # Restart one service without full stop
+#
+# WORKER MANAGEMENT
+#   ./openspeakers.sh workers status              # Show all 7 worker states
+#   ./openspeakers.sh workers logs worker-orpheus # Tail Orpheus worker logs
+#   ./openspeakers.sh workers restart             # Restart all workers
+#   ./openspeakers.sh workers restart worker-qwen3
+#   ./openspeakers.sh workers rebuild worker-f5   # Rebuild image + restart
+#
+# DATABASE
+#   ./openspeakers.sh db migrate          # Apply pending Alembic migrations
+#   ./openspeakers.sh db revision "msg"   # Generate a new migration file
+#   ./openspeakers.sh db backup           # Dump DB to backups/
+#   ./openspeakers.sh db restore backups/openspeakers_20260101_120000.sql
+#   ./openspeakers.sh db reset            # Drop + recreate DB (destructive!)
+#
+# DEVELOPMENT
+#   ./openspeakers.sh shell backend       # Bash in backend container
+#   ./openspeakers.sh shell db            # psql session
+#   ./openspeakers.sh shell redis         # redis-cli session
+#   ./openspeakers.sh shell worker-dia    # Bash in Dia worker
+#   ./openspeakers.sh build               # Build all images (no start)
+#   ./openspeakers.sh build worker-kokoro # Rebuild one image
+#   ./openspeakers.sh gpu                 # Show nvidia-smi output
+#
+# TESTING
+#   ./openspeakers.sh test models         # Smoke-test all deployed TTS models
+#   ./openspeakers.sh test backend        # Run pytest in backend container
+#   ./openspeakers.sh test frontend       # Run npm run check in frontend
+#
+# MAINTENANCE
+#   ./openspeakers.sh clean               # Remove stopped containers + dangling images
+#   ./openspeakers.sh purge               # Remove all containers, volumes, images (!)
+#
+# WORKERS & QUEUES
+#   worker          tts              Kokoro, VibeVoice 0.5B, VibeVoice 1.5B
+#   worker-kokoro   tts.kokoro       Kokoro dedicated (OpenAI-compat endpoint)
+#   worker-fish     tts.fish-speech  Fish Audio S2-Pro
+#   worker-qwen3    tts.qwen3        Qwen3 TTS 1.7B
+#   worker-f5       tts.f5-tts       F5-TTS, Chatterbox, CosyVoice 2.0
+#   worker-orpheus  tts.orpheus      Orpheus 3B
+#   worker-dia      tts.dia          Dia 1.6B
+#
+# NOTES
+#   - GPU mode (default) requires NVIDIA Container Toolkit. Falls back to dev
+#     mode automatically if no GPU is detected.
+#   - The script loads .env from the project root if present.
+#   - docker compose (v2) is required — the old docker-compose (v1) is not supported.
+#   - Run 'start build' on first use or after Dockerfile changes to build images.
+#   - The GPU base image must be built before any worker images:
+#       docker build --network=host -t open_speakers-gpu-base:latest \
+#         -f backend/Dockerfile.base-gpu backend/
+#
+# =============================================================================
 
 set -e
 
