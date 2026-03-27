@@ -34,6 +34,11 @@
   // Orpheus defaults
   let orpheusTemperature = $state(0.6);
   let orpheusTopP = $state(0.95);
+  // F5-TTS defaults
+  let f5RefText = $state('');
+  // CosyVoice 2.0 defaults
+  let cosyRefText = $state('');
+  let cosyInstruct = $state('');
 
   // Reset all params to defaults when model changes
   $effect(() => {
@@ -50,6 +55,9 @@
     cfgWeight = 0.5;
     orpheusTemperature = 0.6;
     orpheusTopP = 0.95;
+    f5RefText = '';
+    cosyRefText = '';
+    cosyInstruct = '';
   });
 
   // Sync extras from internal state
@@ -72,6 +80,15 @@
         break;
       case 'orpheus-3b':
         extras = { temperature: orpheusTemperature, top_p: orpheusTopP };
+        break;
+      case 'f5-tts':
+        extras = f5RefText ? { ref_text: f5RefText } : {};
+        break;
+      case 'cosyvoice-2':
+        extras = {
+          ...(cosyRefText ? { ref_text: cosyRefText } : {}),
+          ...(cosyInstruct ? { instruct: cosyInstruct } : {}),
+        };
         break;
       default:
         extras = {};
@@ -414,6 +431,31 @@
   </div>
 {/if}
 
+<!-- F5-TTS -->
+{#if modelId === 'f5-tts'}
+  <div>
+    <label class="label" for="f5-ref-text">
+      Reference Transcript
+      <span
+        class="label-hint cursor-help"
+        title="Optional: provide the text spoken in the reference audio file. Improves cloning accuracy. Leave empty to auto-transcribe."
+      >&#9432;</span>
+    </label>
+    <input
+      id="f5-ref-text"
+      type="text"
+      bind:value={f5RefText}
+      {disabled}
+      maxlength={300}
+      placeholder="Optional: transcript of the reference audio (e.g. 'The quick brown fox...')"
+      class="input"
+    />
+    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+      Only used when a voice profile is selected. Leave empty for auto-transcription.
+    </p>
+  </div>
+{/if}
+
 <!-- Orpheus 3B -->
 {#if modelId === 'orpheus-3b'}
   <div class="grid grid-cols-2 gap-4">
@@ -507,6 +549,79 @@
           onclick={() => onInsertTag?.(tag)}
         >{tag}</button>
       {/each}
+    </div>
+  </div>
+{/if}
+
+<!-- CosyVoice 2.0 -->
+{#if modelId === 'cosyvoice-2'}
+  <div class="space-y-3">
+    <div class="flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-xs text-blue-700 dark:text-blue-300">
+      <svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <div class="space-y-0.5">
+        <p><strong>No voice:</strong> cross-lingual synthesis with default speaker</p>
+        <p><strong>Voice only:</strong> zero-shot cloning (add transcript below to improve quality)</p>
+        <p><strong>Voice + Style:</strong> voice design mode — shape characteristics with the style field</p>
+      </div>
+    </div>
+
+    <div>
+      <label class="label" for="cosy-ref-text">
+        Reference Transcript
+        <span
+          class="label-hint cursor-help"
+          title="Transcript of what's spoken in the reference audio. Improves zero-shot cloning accuracy."
+        >&#9432;</span>
+      </label>
+      <input
+        id="cosy-ref-text"
+        type="text"
+        bind:value={cosyRefText}
+        {disabled}
+        maxlength={300}
+        placeholder="Optional: transcript of the reference audio"
+        class="input"
+      />
+    </div>
+
+    <div>
+      <label class="label" for="cosy-instruct">
+        Speaking Style
+        <span
+          class="label-hint cursor-help"
+          title="Natural language instruction to shape the voice. Requires a voice profile to be selected."
+        >&#9432;</span>
+      </label>
+      <input
+        id="cosy-instruct"
+        type="text"
+        bind:value={cosyInstruct}
+        {disabled}
+        maxlength={200}
+        placeholder="e.g. 'speak softly and gently' or 'sound excited and energetic'"
+        class="input"
+      />
+      <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+        Describe how the voice should sound — only used when a voice profile is selected
+      </p>
+      <select
+        class="input mt-2 text-sm"
+        onchange={(e) => {
+          if (e.currentTarget.value) {
+            cosyInstruct = e.currentTarget.value;
+            e.currentTarget.value = '';
+          }
+        }}
+      >
+        <option value="">— Insert example style —</option>
+        <option value="Speak in a warm, friendly tone">Warm and friendly</option>
+        <option value="Speak softly and gently">Soft and gentle</option>
+        <option value="Speak excitedly with high energy">Excited</option>
+        <option value="Speak slowly and clearly">Slow and clear</option>
+        <option value="Speak with a serious, authoritative tone">Authoritative</option>
+      </select>
     </div>
   </div>
 {/if}
