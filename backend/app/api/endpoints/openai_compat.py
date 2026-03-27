@@ -52,6 +52,7 @@ FORMAT_TO_MEDIA_TYPE = {
 }
 
 QUEUE_MAP: dict[str, str] = {
+    "kokoro": "tts.kokoro",
     "fish-speech-s2": "tts.fish-speech",
     "qwen3-tts": "tts.qwen3",
     "orpheus-3b": "tts.orpheus",

@@ -1,24 +1,13 @@
 # F5-TTS / Chatterbox / CosyVoice 2.0 / Parler TTS combined worker
 # Listens on the `tts.f5-tts` Celery queue.
+#
+# Build base first:
+#   docker build --network=host -t open_speakers-gpu-base:latest \
+#     -f Dockerfile.base-gpu .
 
-FROM python:3.12-slim
+FROM open_speakers-gpu-base:latest
 
 WORKDIR /app
-
-# System dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    ffmpeg \
-    libsndfile1 \
-    libpq-dev \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-# PyTorch cu128
-RUN pip install --no-cache-dir \
-    torch torchaudio \
-    --index-url https://download.pytorch.org/whl/cu128
 
 # F5-TTS
 RUN pip install --no-cache-dir "f5-tts"
@@ -26,19 +15,13 @@ RUN pip install --no-cache-dir "f5-tts"
 # Chatterbox TTS
 RUN pip install --no-cache-dir "chatterbox-tts"
 
-# Parler TTS Mini
-RUN pip install --no-cache-dir "parler-tts"
+# Parler TTS Mini + transformers for tokenizer
+RUN pip install --no-cache-dir "parler-tts" "transformers"
 
-# CosyVoice 2.0 — install from GitHub
+# CosyVoice 2.0 — install from GitHub (optional; continues on failure)
 RUN pip install --no-cache-dir \
-    git+https://github.com/FunAudioLLM/CosyVoice.git || \
-    echo "CosyVoice install failed (optional — install manually if needed)"
-
-# Audio processing
-RUN pip install --no-cache-dir \
-    soundfile \
-    numpy \
-    scipy
+    git+https://github.com/FunAudioLLM/CosyVoice.git \
+    || echo "CosyVoice install failed (optional — can be installed manually)"
 
 # OpenSpeakers backend deps
 RUN pip install --no-cache-dir \

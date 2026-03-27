@@ -113,6 +113,47 @@ services:
       redis:
         condition: service_healthy
 
+  worker-kokoro:
+    container_name: open_speakers-worker-kokoro
+    restart: always
+    env_file: .env
+    security_opt:
+      - no-new-privileges:true
+    # Dedicated Kokoro worker — always-on standby model gets its own queue
+    # so it is never blocked by longer-running VibeVoice jobs on the main queue.
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info
+      -Q tts.kokoro
+      --pool=threads
+      --concurrency=1
+      --max-tasks-per-child=1000
+      --hostname kokoro-worker@%h
+      -E
+    volumes:
+      - ${MODEL_CACHE_DIR:-./models}/huggingface:/home/appuser/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./models}/torch:/home/appuser/.cache/torch
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AUDIO_OUTPUT_DIR=/app/audio_output
+      - HF_HOME=/home/appuser/.cache/huggingface
+      - HOME=/home/appuser
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery inspect ping -d kokoro-worker@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   worker-fish:
     container_name: open_speakers-worker-fish
     restart: always

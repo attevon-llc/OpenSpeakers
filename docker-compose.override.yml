@@ -44,6 +44,33 @@ services:
       # Use cached HF models only — avoids network timeouts in Docker
       - HF_HUB_OFFLINE=1
 
+  worker-kokoro:
+    image: open_speakers-worker:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    volumes:
+      - ./backend:/app
+      - ./configs:/app/configs:ro
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/home/appuser/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./model_cache}/torch:/home/appuser/.cache/torch
+      - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+      - ${VIBEVOICE_REPO_PATH:-/mnt/nvm/repos/VibeVoice}:/opt/vibevoice
+      - /mnt/nas/models:/models
+    environment:
+      - PYTHONPATH=/opt/vibevoice:${PYTHONPATH:-}
+      - HF_HOME=/home/appuser/.cache/huggingface
+      - HOME=/home/appuser
+      - TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor_cache
+      - USER=appuser
+      - HF_HUB_OFFLINE=1
+    command: >
+      celery -A app.core.celery worker
+      --loglevel=info -Q tts.kokoro
+      --pool=threads --concurrency=1
+      --max-tasks-per-child=1000
+      --hostname kokoro-worker@%h -E
+
   worker-fish:
     image: open_speakers-worker-fish:latest
     build:

@@ -123,14 +123,15 @@
 
 <div class="space-y-2">
   {#if src}
-    <!-- WaveSurfer container -->
+    <!-- WaveSurfer container — primary keyboard target -->
     <div
       bind:this={container}
       class="w-full rounded-lg overflow-hidden cursor-pointer
              {!ready ? 'opacity-50' : ''}"
-      role="presentation"
+      role="application"
+      aria-label="Audio waveform. Space to play/pause, arrow keys to seek ±5s"
       onkeydown={handleKeydown}
-      tabindex={-1}
+      tabindex={0}
     ></div>
 
     <div class="flex items-center gap-3">
@@ -156,14 +157,8 @@
         {/if}
       </button>
 
-      <!-- Keyboard seek hint (accessible) -->
-      <div
-        class="flex-1 text-xs text-gray-500 dark:text-gray-500"
-        onkeydown={handleKeydown}
-        role="presentation"
-        tabindex={0}
-        aria-label="Audio controls: Space to play/pause, Arrow keys to seek ±5s, Home/End to jump"
-      >
+      <!-- Keyboard seek hint -->
+      <div class="flex-1 text-xs text-gray-500 dark:text-gray-500">
         {#if !ready && src}
           <span class="text-xs text-gray-400 dark:text-gray-600">Loading waveform...</span>
         {:else}

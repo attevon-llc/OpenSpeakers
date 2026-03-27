@@ -56,7 +56,7 @@
   const STREAM_BUFFER_S = 0.75;
   let _pendingChunks: Array<{ float32: Float32Array; sampleRate: number }> = [];
   let _pendingDuration = 0;
-  let _streamPlaybackStarted = false;
+  let _streamPlaybackStarted = $state(false);
 
   let builtinVoices: BuiltinVoice[] = $state([]);
   let clonedVoices: VoiceProfile[] = $state([]);

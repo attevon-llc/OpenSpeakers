@@ -29,6 +29,8 @@ router = APIRouter(prefix="/tts", tags=["tts"])
 
 # Models that run on dedicated worker queues instead of the default "tts" queue
 QUEUE_MAP: dict[str, str] = {
+    # Dedicated queues — each maps to its own worker container
+    "kokoro": "tts.kokoro",  # always-on standby; dedicated so it never waits behind VibeVoice
     "fish-speech-s2": "tts.fish-speech",
     "qwen3-tts": "tts.qwen3",
     "orpheus-3b": "tts.orpheus",
@@ -36,9 +38,11 @@ QUEUE_MAP: dict[str, str] = {
     "chatterbox": "tts.f5-tts",
     "cosyvoice-2": "tts.f5-tts",
     "parler-tts": "tts.f5-tts",
-    "xtts-v2": "tts.xtts",
     "dia-1b": "tts.dia",
+    # Future models
+    "xtts-v2": "tts.xtts",
     "bark": "tts.bark",
+    # Default (no entry) → "tts" queue → main worker (VibeVoice 0.5B / 1.5B)
 }
 
 

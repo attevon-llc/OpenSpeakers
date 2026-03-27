@@ -15,19 +15,21 @@
 </script>
 
 {#if open}
-  <!-- Backdrop -->
+  <!-- Backdrop — purely visual; click closes modal -->
   <div
     class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center"
     onclick={close}
-    role="presentation"
+    role="none"
   >
     <!-- Modal -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
       class="bg-gray-800 rounded-xl shadow-2xl p-6 max-w-md w-full mx-4 border border-gray-700"
       onclick={(e) => e.stopPropagation()}
       role="dialog"
       aria-modal="true"
       aria-label="Keyboard shortcuts"
+      tabindex={-1}
     >
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-white">Keyboard Shortcuts</h2>
