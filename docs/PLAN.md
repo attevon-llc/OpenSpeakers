@@ -1,5 +1,97 @@
 # OpenSpeakers — Implementation Plan
 
+## Completion Status
+
+> Last updated: 2026-03-27
+
+### Summary
+
+All planned phases (1–6) are complete. 7 of 11 registered models are fully deployed and
+working. The remaining 4 (F5-TTS, Chatterbox, CosyVoice 2.0, Parler TTS) have complete
+implementations and are registered in the model registry, but the `worker-f5` container has
+not yet been built or deployed.
+
+### Phase 1 — Foundation: COMPLETE
+
+- [x] Project scaffold: backend + frontend + Docker Compose
+- [x] `TTSModelBase` abstraction layer
+- [x] `ModelManager` singleton with hot-swap and `threading.Lock`
+- [x] VibeVoice 0.5B implementation with PCM16 streaming
+- [x] Fish Audio S2-Pro implementation (full, not stub)
+- [x] Celery worker with single-GPU concurrency per container
+- [x] FastAPI endpoints: generate, job status, audio download, model list
+- [x] PostgreSQL schema + Alembic migrations
+- [x] SvelteKit frontend: TTS page + streaming audio player
+- [x] Docker build and smoke test (all 7 deployed models passing)
+
+### Phase 2 — More Models: COMPLETE
+
+- [x] Qwen3 TTS 1.7B implementation (`worker-qwen3` container)
+- [x] Kokoro 82M implementation — standby model, always loaded
+- [x] Orpheus 3B implementation (vLLM backend, `worker-orpheus` container)
+- [x] Dia 1.6B implementation (`worker-dia` container)
+- [x] `configs/models.yaml` model registry for easy enable/disable
+- [x] VRAM estimates tracked per model in registry and UI
+
+### Phase 3 — Voice Cloning: COMPLETE
+
+- [x] Fish Audio S2-Pro zero-shot cloning
+- [x] VibeVoice 1.5B zero-shot cloning (`voice_samples` parameter)
+- [x] Qwen3 TTS zero-shot cloning (reference audio path)
+- [x] Voice cloning page (`/clone`)
+- [x] Voice profile persistence (PostgreSQL + file storage)
+- [x] Voice profile management: rename, tag, describe, preview reference audio
+- [x] Model comparison page (`/compare`) with sequential multi-model generation
+
+### Phase 4 — Polish: COMPLETE
+
+- [x] Streaming TTS output (VibeVoice 0.5B via Redis pub/sub + Web Audio API)
+- [x] WebSocket progress for long generations (`/ws/jobs/{id}`)
+- [x] Batch generation (`POST /api/tts/batch`) with ZIP download
+- [x] Job cancellation (`DELETE /api/tts/jobs/{id}`)
+- [x] Full job history page (`/history`) with search, filter, pagination
+- [x] Toast notification system
+- [x] Keyboard shortcuts modal
+- [x] Mobile-responsive sidebar
+- [x] Dark mode with FOUC prevention
+- [x] Per-page `<title>` tags
+- [x] WaveSurfer.js waveform visualisation
+
+### Phase 5 — Model Expansion: COMPLETE (partial deployment)
+
+- [x] VibeVoice 1.5B added to main `worker` container
+- [x] F5-TTS implementation (registered; `worker-f5` not yet deployed)
+- [x] Chatterbox implementation (registered; `worker-f5` not yet deployed)
+- [x] CosyVoice 2.0 implementation (registered; `worker-f5` not yet deployed)
+- [x] Parler TTS Mini implementation (registered; `worker-f5` not yet deployed)
+- [ ] `worker-f5` container build and deployment — **PENDING**
+
+### Phase 6 — OpenAI Compatibility: COMPLETE
+
+- [x] `POST /v1/audio/speech` — OpenAI-compatible TTS endpoint
+- [x] `GET /v1/models` — OpenAI-format model list
+- [x] `tts-1` → Kokoro 82M mapping (fast, always available via standby)
+- [x] `tts-1-hd` → Orpheus 3B mapping (highest quality)
+- [x] `worker-kokoro` dedicated queue for low-latency OpenAI-compat responses
+- [x] Ollama-style `keep_alive` parameter on generate and model-load endpoints
+- [x] `POST /api/models/{id}/load` — pre-warm endpoint with `keep_alive`
+- [x] `DELETE /api/models/{id}/load` — force-unload endpoint
+- [x] `openspeakers.sh` management CLI
+
+### Deferred / Not Planned
+
+- **Qwen3 true streaming**: `non_streaming_mode=False` exists in the API but the library
+  only simulates streaming text input, not true PCM chunk output. Deferred until confirmed
+  otherwise.
+- **flash-attn in base GPU image**: requires `nvcc` at build time (absent from
+  `python:3.12-slim`). Secondary workers fall back to `sdpa`. Deferred.
+- **MinIO object storage**: audio files stored on local disk. MinIO integration deferred.
+- **API key authentication**: no auth layer; intended for single-user / LAN deployment.
+- **Flower monitoring dashboard**: not deployed; use `docker compose logs` for monitoring.
+- **Docker Hub publish** (`davidamacey/openspeakers`): not yet published.
+
+---
+
 ## Overview
 
 OpenSpeakers is a unified TTS (text-to-speech) and voice cloning application that runs
@@ -167,53 +259,54 @@ Request: generate with fish-speech-s2
 
 ## Implementation Phases
 
-### Phase 1 — Foundation (Current)
+### Phase 1 — Foundation (COMPLETE)
 **Goal**: Two models working end-to-end with hot-swap.
 
 - [x] Project scaffold: backend + frontend + Docker Compose
 - [x] Model abstraction layer (`TTSModelBase`)
 - [x] Model manager (hot-swap, singleton)
 - [x] VibeVoice implementation (microsoft/VibeVoice-Realtime-0.5B)
-- [x] Fish Speech S2 stub (fishaudio/fish-speech-1.5)
+- [x] Fish Speech S2-Pro full implementation (fishaudio/s2-pro)
 - [x] Celery worker with single-GPU concurrency
 - [x] FastAPI endpoints: generate, job status, model list
 - [x] PostgreSQL schema + Alembic migrations
 - [x] SvelteKit frontend: TTS page + audio player
-- [ ] Docker build and smoke test
-- [ ] Model download verification
+- [x] Docker build and smoke test (all 7 models passing)
 
-### Phase 2 — More Models
+### Phase 2 — More Models (COMPLETE)
 **Goal**: Qwen3 TTS and additional models.
 
-- [ ] Qwen3 TTS implementation (Qwen/Qwen3-TTS)
-- [ ] Kokoro TTS implementation (hexgrad/Kokoro-82M)
-- [ ] StyleTTS2 implementation
-- [ ] Model config YAML for easy model registration
-- [ ] Model download management UI
-- [ ] VRAM usage tracking per model
+- [x] Qwen3 TTS 1.7B implementation (`Qwen/Qwen3-TTS`)
+- [x] Kokoro 82M implementation (`hexgrad/Kokoro-82M`) — standby model
+- [x] Orpheus 3B implementation (`canopylabs/orpheus-3b-0.1-ft`) via vLLM
+- [x] Dia 1.6B implementation (`nari-labs/Dia-1.6B`)
+- [x] `configs/models.yaml` model registry for easy enable/disable
+- [x] VRAM usage tracking per model
 
-### Phase 3 — Voice Cloning
+### Phase 3 — Voice Cloning (COMPLETE)
 **Goal**: Full voice cloning UI and storage.
 
-- [ ] Fish Speech S2 voice cloning (full implementation)
-- [ ] VibeVoice voice cloning (reference speaker support)
-- [ ] Voice Cloning page
-- [ ] Voice profile persistence (PostgreSQL + file storage)
-- [ ] Comparison page with multi-model side-by-side
-- [ ] Voice quality rating system
+- [x] Fish Audio S2-Pro zero-shot voice cloning
+- [x] VibeVoice 1.5B zero-shot cloning (`voice_samples`)
+- [x] Qwen3 TTS zero-shot cloning (reference audio path)
+- [x] Voice Cloning page (`/clone`)
+- [x] Voice profile persistence (PostgreSQL + file storage)
+- [x] Comparison page with multi-model side-by-side
 
-### Phase 4 — Polish
+### Phase 4 — Polish (COMPLETE)
 **Goal**: Production-ready with presets and streaming.
 
-- [ ] Streaming TTS output (chunked audio as it generates)
-- [ ] WebSocket progress for long generations
-- [ ] Preset system (save parameter combinations)
-- [ ] Batch generation (multiple texts at once)
-- [ ] Export comparison as ZIP
-- [ ] API key authentication (optional, for multi-user)
-- [ ] MinIO for audio file storage (instead of local disk)
-- [ ] Flower monitoring dashboard
-- [ ] Docker Hub publish: `davidamacey/OpenSpeakers`
+- [x] Streaming TTS output — VibeVoice 0.5B PCM16 chunks via Redis pub/sub
+- [x] WebSocket progress for long generations (`/ws/jobs/{id}`)
+- [x] Batch generation (up to 100 lines) with ZIP download
+- [x] Job cancellation (`DELETE /api/tts/jobs/{id}`)
+- [x] Full job history page with search, filter, pagination
+- [x] Toast notifications, keyboard shortcuts, mobile responsive layout
+- [ ] Preset system (save parameter combinations) — deferred
+- [ ] API key authentication — deferred (single-user / LAN use case)
+- [ ] MinIO for audio file storage — deferred
+- [ ] Flower monitoring dashboard — deferred
+- [ ] Docker Hub publish (`davidamacey/openspeakers`) — deferred
 
 ---
 
