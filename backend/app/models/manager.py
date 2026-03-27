@@ -18,6 +18,7 @@ Usage (inside a Celery task):
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
 import time
@@ -87,6 +88,9 @@ class ModelManager:
         self._device: str = "cuda"
         # Standby config: model_id -> True if model should stay loaded
         self._standby: dict[str, bool] = _load_standby_config()
+        # Per-model keep_alive TTL: model_id → monotonic expiry timestamp
+        # Special values: math.inf = indefinite, absent/expired = use idle timer
+        self._keep_alive_until: dict[str, float] = {}
         self._register_defaults()
         self._apply_standby_flags()
         self._start_idle_timer()
@@ -202,6 +206,55 @@ class ModelManager:
         """Return list of model IDs configured as standby."""
         return [mid for mid, flag in self._standby.items() if flag]
 
+    # -- Keep-alive / TTL ---------------------------------------------------
+
+    def set_keep_alive(self, model_id: str, seconds: int | None) -> None:
+        """Set a per-model keep_alive TTL (Ollama-style semantics).
+
+        seconds:
+          None → clear any TTL; model falls back to the global idle timeout
+             0 → clear TTL (unload as soon as the next idle check fires)
+            -1 → keep indefinitely (never idle-unload)
+            >0 → keep loaded for N seconds after this call
+        """
+        if seconds is None or seconds == 0:
+            self._keep_alive_until.pop(model_id, None)
+            logger.debug("keep_alive cleared for %s (will use idle timeout)", model_id)
+        elif seconds < 0:
+            self._keep_alive_until[model_id] = math.inf
+            logger.info("keep_alive set to INDEFINITE for %s", model_id)
+        else:
+            expiry = time.monotonic() + seconds
+            self._keep_alive_until[model_id] = expiry
+            logger.info(
+                "keep_alive set for %s: %ds (expires in %.0fs)",
+                model_id,
+                seconds,
+                seconds,
+            )
+
+    def _is_keep_alive_active(self, model_id: str | None) -> bool:
+        """Return True if the model has an unexpired keep_alive TTL."""
+        if model_id is None:
+            return False
+        expiry = self._keep_alive_until.get(model_id)
+        if expiry is None:
+            return False
+        return expiry == math.inf or time.monotonic() < expiry
+
+    def get_keep_alive_remaining(self, model_id: str) -> float | None:
+        """Return seconds remaining on keep_alive TTL, or None if not set.
+
+        Returns math.inf if keep_alive is indefinite.
+        Returns a negative number if the TTL has expired.
+        """
+        expiry = self._keep_alive_until.get(model_id)
+        if expiry is None:
+            return None
+        if expiry == math.inf:
+            return math.inf
+        return expiry - time.monotonic()
+
     # -- Model loading ------------------------------------------------------
 
     def load_model(self, model_id: str, device: str | None = None) -> TTSModelBase:
@@ -257,14 +310,17 @@ class ModelManager:
         """Unload the current model and free GPU memory."""
         if self.current_model is None:
             return
-        logger.info("Unloading model %s", self.current_model_id)
+        model_id = self.current_model_id
+        logger.info("Unloading model %s", model_id)
         try:
             self.current_model.unload()
         except Exception:
-            logger.exception("Error unloading model %s", self.current_model_id)
+            logger.exception("Error unloading model %s", model_id)
         finally:
             self.current_model = None
             self.current_model_id = None
+            # Clear any keep_alive TTL for this model on unload
+            self._keep_alive_until.pop(model_id, None)
             self._clear_gpu_cache()
 
     def _clear_gpu_cache(self) -> None:
@@ -290,20 +346,24 @@ class ModelManager:
     def unload_all(self, *, respect_standby: bool = True) -> None:
         """Unload all loaded models.
 
-        If *respect_standby* is True (the default), standby models are kept loaded.
+        If *respect_standby* is True (the default), standby models are kept loaded,
+        and models with an active keep_alive TTL are kept loaded.
         Pass ``respect_standby=False`` to force-unload everything (e.g. on shutdown).
         """
         with self._load_lock:
-            if (
-                self.current_model is not None
-                and respect_standby
-                and self.is_standby(self.current_model_id)
-            ):
-                logger.info(
-                    "Keeping standby model %s loaded after task completion",
-                    self.current_model_id,
-                )
-                return
+            if self.current_model is not None and respect_standby:
+                model_id = self.current_model_id
+                if self.is_standby(model_id):
+                    logger.info("Keeping standby model %s loaded after task", model_id)
+                    return
+                if self._is_keep_alive_active(model_id):
+                    remaining = self.get_keep_alive_remaining(model_id)
+                    logger.info(
+                        "Keeping model %s loaded (keep_alive active, %.0fs remaining)",
+                        model_id,
+                        remaining if remaining != math.inf else -1,
+                    )
+                    return
             self._unload_current()
 
     # -- Idle auto-unload ---------------------------------------------------
@@ -319,14 +379,24 @@ class ModelManager:
                 time.sleep(60)  # check every minute
                 if self.current_model is None:
                     continue
+                model_id = self.current_model_id
                 # Standby models are never idle-unloaded
-                if self.is_standby(self.current_model_id):
+                if self.is_standby(model_id):
+                    continue
+                # Models with active keep_alive are not idle-unloaded
+                if self._is_keep_alive_active(model_id):
+                    remaining = self.get_keep_alive_remaining(model_id)
+                    logger.debug(
+                        "Model %s has active keep_alive (%.0fs remaining), skipping idle unload",
+                        model_id,
+                        remaining if remaining != math.inf else -1,
+                    )
                     continue
                 if self._in_use > 0:
                     # A task is actively using the model — skip this cycle entirely
                     logger.debug(
                         "Model %s in use (%d), skipping idle check",
-                        self.current_model_id,
+                        model_id,
                         self._in_use,
                     )
                     continue
@@ -334,14 +404,15 @@ class ModelManager:
                 if idle_seconds >= MODEL_IDLE_TIMEOUT:
                     logger.info(
                         "Model %s idle for %.0fs (timeout=%ds), unloading to free GPU",
-                        self.current_model_id,
+                        model_id,
                         idle_seconds,
                         MODEL_IDLE_TIMEOUT,
                     )
                     with self._load_lock:
                         # Double-check after acquiring lock
                         if self.current_model is not None and self._in_use == 0:
-                            if self.is_standby(self.current_model_id):
+                            mid = self.current_model_id
+                            if self.is_standby(mid) or self._is_keep_alive_active(mid):
                                 continue
                             idle_now = time.monotonic() - self._last_used
                             if idle_now >= MODEL_IDLE_TIMEOUT:
@@ -370,6 +441,8 @@ class ModelManager:
         info = instance.get_info()
         info["status"] = status
         info["standby"] = self.is_standby(model_id)
+        remaining = self.get_keep_alive_remaining(model_id)
+        info["keep_alive_seconds_remaining"] = remaining if remaining is not None else None
         return info
 
     def list_models(self) -> list[dict]:

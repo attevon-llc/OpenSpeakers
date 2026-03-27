@@ -17,3 +17,4 @@ class ModelInfo(BaseModel):
     is_loaded: bool
     status: str  # "loaded" | "available" | "loading" | "unknown"
     standby: bool = False  # if True, model stays loaded between requests
+    keep_alive_seconds_remaining: float | None = None  # None = no TTL set; -1 or inf = indefinite

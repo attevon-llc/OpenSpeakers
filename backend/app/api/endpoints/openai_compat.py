@@ -62,12 +62,49 @@ QUEUE_MAP: dict[str, str] = {
 }
 
 
+def _parse_keep_alive(value: str | int | None) -> int | None:
+    """Parse Ollama-style keep_alive value to integer seconds.
+
+    Accepts:
+      None          → None (server default idle timeout)
+      -1 or "-1"    → -1 (indefinite)
+       0 or "0"     → 0 (clear TTL)
+      "5m"          → 300
+      "1h"          → 3600
+      "30s" or "30" → 30
+    """
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    value = str(value).strip()
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    suffixes = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    if value and value[-1].lower() in suffixes:
+        try:
+            return int(value[:-1]) * suffixes[value[-1].lower()]
+        except ValueError:
+            pass
+    return None
+
+
 class OpenAISpeechRequest(BaseModel):
     model: str = "tts-1"
     input: str = Field(..., min_length=1, max_length=4096)
     voice: str = "alloy"
     response_format: str = "mp3"
     speed: float = Field(1.0, ge=0.25, le=4.0)
+    keep_alive: str | int | None = Field(
+        None,
+        description=(
+            "Ollama-style keep_alive. "
+            '"-1" = keep indefinitely, "0" = unload after, '
+            '"5m" / "1h" = duration string, null = server default.'
+        ),
+    )
 
 
 @router.post("/v1/audio/speech")
@@ -94,12 +131,20 @@ def openai_speech(req: OpenAISpeechRequest, db: Session = Depends(get_db)):
     if output_format not in ("wav", "mp3", "ogg"):
         output_format = "mp3"  # default for unsupported formats (opus, aac, flac)
 
+    keep_alive_seconds = _parse_keep_alive(req.keep_alive)
+
     # Create job
     job = TTSJob(
         model_id=model_id,
         text=req.input,
         voice_id=voice_id,
-        parameters={"speed": speed, "language": "en", "output_format": output_format, "extra": {}},
+        parameters={
+            "speed": speed,
+            "language": "en",
+            "output_format": output_format,
+            "extra": {},
+            "keep_alive": keep_alive_seconds,
+        },
         status=JobStatus.PENDING,
     )
     db.add(job)

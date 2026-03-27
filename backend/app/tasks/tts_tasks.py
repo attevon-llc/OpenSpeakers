@@ -220,7 +220,15 @@ def generate_tts(self: TTSTask, job_id: str) -> dict:
             if codec:
                 target_path = output_dir / f"{job_id}.{output_format}"
                 result = subprocess.run(
-                    ["ffmpeg", "-y", "-i", str(output_path), "-codec:a", codec, str(target_path)],
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        str(output_path),
+                        "-codec:a",
+                        codec,
+                        str(target_path),
+                    ],
                     capture_output=True,
                     timeout=120,
                 )
@@ -238,6 +246,11 @@ def generate_tts(self: TTSTask, job_id: str) -> dict:
         job.processing_time_ms = processing_time_ms
         job.completed_at = datetime.now(UTC)
         db.commit()
+
+        # Apply keep_alive TTL so unload_all() in finally respects it
+        keep_alive = params.get("keep_alive")
+        if keep_alive is not None:
+            self.manager.set_keep_alive(job.model_id, keep_alive)
 
         _pub(
             job_id,

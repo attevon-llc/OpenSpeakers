@@ -17,6 +17,14 @@ class GenerateRequest(BaseModel):
     language: str = Field("en", description="BCP-47 language code")
     output_format: str = Field("wav", pattern="^(wav|mp3|ogg)$")
     extra: dict = Field(default_factory=dict, description="Model-specific parameters")
+    keep_alive: int | None = Field(
+        None,
+        description=(
+            "Seconds to keep model in GPU VRAM after generation. "
+            "-1 = keep indefinitely, 0 = unload immediately, "
+            "None = use server default (MODEL_IDLE_TIMEOUT env var)."
+        ),
+    )
 
 
 class GenerateResponse(BaseModel):

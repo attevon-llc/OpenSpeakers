@@ -64,6 +64,7 @@ def create_tts_job(request: GenerateRequest, db: Session = Depends(get_db)) -> G
             "language": request.language,
             "output_format": request.output_format,
             "extra": request.extra,
+            "keep_alive": request.keep_alive,
         },
         status=JobStatus.PENDING,
     )
