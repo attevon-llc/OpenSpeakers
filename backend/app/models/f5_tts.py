@@ -36,7 +36,7 @@ class F5TTSModel(TTSModelBase):
         self._device = device
         from f5_tts.api import F5TTS
 
-        self._model = F5TTS(model_type="F5-TTS", device=device)
+        self._model = F5TTS(device=device)
         self._loaded = True
         logger.info("F5-TTS loaded on %s", device)
 
@@ -51,17 +51,33 @@ class F5TTSModel(TTSModelBase):
         except ImportError:
             pass
 
+    # Default reference audio bundled with the f5-tts package
+    _DEFAULT_REF_AUDIO = (
+        "/usr/local/lib/python3.12/site-packages/f5_tts/infer/examples/basic/basic_ref_en.wav"
+    )
+    _DEFAULT_REF_TEXT = "Some call me nature, others call me mother nature."
+
     def generate(self, request: GenerateRequest) -> GenerateResult:
         if not self._loaded or self._model is None:
             raise RuntimeError("F5-TTS is not loaded")
 
         import numpy as np
 
-        # voice_id is a path to a reference audio file
-        ref_file = (
-            request.voice_id if request.voice_id and Path(request.voice_id).exists() else None
-        )
+        # voice_id is a path to a reference audio file; fall back to bundled example
+        ref_file = None
         ref_text = request.extra.get("ref_text", "")
+        if request.voice_id and Path(request.voice_id).exists():
+            ref_file = request.voice_id
+        elif Path(self._DEFAULT_REF_AUDIO).exists():
+            ref_file = self._DEFAULT_REF_AUDIO
+            # Provide the known transcription to avoid Whisper download
+            if not ref_text:
+                ref_text = self._DEFAULT_REF_TEXT
+        else:
+            raise RuntimeError(
+                "F5-TTS requires a reference audio file. "
+                "Pass voice_id pointing to a WAV/MP3 file, or use a cloned voice profile."
+            )
 
         wav, sr, _ = self._model.infer(
             ref_file=ref_file,

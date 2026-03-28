@@ -22,7 +22,7 @@ class CosyVoice2Model(TTSModelBase):
     model_name = "CosyVoice 2.0"
     description = "FunAudioLLM CosyVoice 2.0 — 150ms latency, MOS 5.53, zero-shot + voice design"
     supports_voice_cloning = True
-    supports_streaming = True
+    supports_streaming = False  # generate() collects all chunks; stream_generate not implemented
     supports_speed = False
     supported_languages = ["en", "zh", "ja", "ko", "fr", "de", "es", "pt", "ar", "ru"]
     hf_repo = "FunAudioLLM/CosyVoice2-0.5B"
@@ -31,13 +31,40 @@ class CosyVoice2Model(TTSModelBase):
     def __init__(self) -> None:
         self._model = None
 
-    def load(self, device: str = "cuda") -> None:
+    _HF_MODEL_ID = "FunAudioLLM/CosyVoice2-0.5B"
+
+    def _resolve_model_path(self) -> str:
+        """Resolve model to a local directory path (HF hub cache or explicit override).
+
+        CosyVoice2.__init__ skips snapshot_download when os.path.exists(model_dir)
+        is True, so passing the resolved local path avoids any network call.
+        """
         import os
 
+        override = os.environ.get("COSYVOICE_MODEL_PATH")
+        if override and Path(override).is_dir():
+            return override
+
+        # Find the model in the HF hub cache
+        try:
+            from huggingface_hub import snapshot_download
+
+            return snapshot_download(self._HF_MODEL_ID)
+        except Exception:
+            pass
+
+        return self._HF_MODEL_ID
+
+    def load(self, device: str = "cuda") -> None:
         logger.info("Loading CosyVoice 2.0 on %s", device)
+
+        # Resolve to local HF cache path so CosyVoice2 skips its modelscope download
+        # (CosyVoice2.__init__ only calls snapshot_download if the path doesn't exist)
+        model_path = self._resolve_model_path()
+        logger.info("CosyVoice 2.0 model path: %s", model_path)
+
         from cosyvoice.cli.cosyvoice import CosyVoice2
 
-        model_path = os.environ.get("COSYVOICE_MODEL_PATH", "FunAudioLLM/CosyVoice2-0.5B")
         self._model = CosyVoice2(model_path)
         self._loaded = True
         logger.info("CosyVoice 2.0 loaded from %s", model_path)
@@ -53,6 +80,9 @@ class CosyVoice2Model(TTSModelBase):
         except ImportError:
             pass
 
+    # Bundled reference audio (from CosyVoice repo clone)
+    _DEFAULT_ZERO_SHOT_REF = "/opt/cosyvoice/asset/zero_shot_prompt.wav"
+
     def generate(self, request: GenerateRequest) -> GenerateResult:
         if not self._loaded or self._model is None:
             raise RuntimeError("CosyVoice 2.0 is not loaded")
@@ -60,9 +90,12 @@ class CosyVoice2Model(TTSModelBase):
         import torch
         import torchaudio
 
-        ref_audio = (
-            request.voice_id if request.voice_id and Path(request.voice_id).exists() else None
-        )
+        ref_audio = None
+        if request.voice_id and Path(request.voice_id).exists():
+            ref_audio = request.voice_id
+        elif Path(self._DEFAULT_ZERO_SHOT_REF).exists():
+            ref_audio = self._DEFAULT_ZERO_SHOT_REF
+
         ref_text = request.extra.get("ref_text", "")
         instruct_text = request.extra.get("instruct", "")
 
@@ -81,9 +114,10 @@ class CosyVoice2Model(TTSModelBase):
             ):
                 all_audio.append(chunk["tts_speech"])
         else:
-            # Cross-lingual (uses default speaker)
-            for chunk in self._model.inference_cross_lingual(request.text, None, stream=False):
-                all_audio.append(chunk["tts_speech"])
+            raise RuntimeError(
+                "CosyVoice 2.0 requires a reference audio file. "
+                "Pass voice_id pointing to a WAV/MP3 file, or use a cloned voice profile."
+            )
 
         audio = torch.cat(all_audio, dim=-1)
         sr = self._model.sample_rate if hasattr(self._model, "sample_rate") else SAMPLE_RATE

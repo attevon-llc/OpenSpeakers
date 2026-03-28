@@ -137,7 +137,7 @@ services:
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
       - /mnt/nas/models:/models
     environment:
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app:/opt/cosyvoice:/opt/cosyvoice/third_party/Matcha-TTS
       - POSTGRES_HOST=postgres
       - REDIS_HOST=redis
       - AUDIO_OUTPUT_DIR=/app/audio_output
