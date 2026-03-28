@@ -86,27 +86,20 @@ with GPU hot-swap, async job queuing, real-time streaming, and a modern SvelteKi
 git clone https://github.com/davidamacey/OpenSpeakers.git
 cd OpenSpeakers
 
-# Copy and edit the environment file
+# Copy environment file (COMPOSE_FILE is pre-configured inside)
 cp .env.example .env
-# Edit .env: set HF_TOKEN if you want Orpheus 3B (gated model)
+# Optional: set HF_TOKEN in .env if you want Orpheus 3B (gated model)
 
-# Download all model weights into local cache (~120 GB total)
-# This only needs to run once; workers use HF_HUB_OFFLINE=1 after this
+# Download all model weights (~120 GB total) — only needed once
 ./scripts/download-models.sh
-# or download specific models only:
-# ./scripts/download-models.sh --models kokoro,f5-tts,chatterbox
+# Download specific models only: --models kokoro,f5-tts,chatterbox
 
-# Build the shared GPU base image first
+# Build the shared GPU base image (first run only)
 docker build --network=host -t open_speakers-gpu-base:latest \
   -f backend/Dockerfile.base-gpu backend/
 
-# Build and start all services
-docker compose -f docker-compose.yml \
-               -f docker-compose.override.yml \
-               -f docker-compose.gpu.yml up -d --build
-
-# Apply database migrations
-docker compose exec backend alembic upgrade head
+# Build and start — database migrations run automatically on backend startup
+docker compose up -d --build
 ```
 
 Frontend: **http://localhost:5200**
@@ -403,28 +396,16 @@ Copy `.env.example` to `.env` and adjust as needed:
 ## Development
 
 ```bash
-# Start all services (full GPU stack)
-docker compose -f docker-compose.yml -f docker-compose.override.yml \
-               -f docker-compose.gpu.yml up -d
+# Start all services (COMPOSE_FILE in .env selects gpu+override automatically)
+docker compose up -d
 
-# Start lightweight (no GPU workers — backend + frontend only)
-docker compose up postgres redis backend frontend
-
-# Run backend tests
-docker compose exec backend pytest tests/ -v
-
-# Apply DB migrations
-docker compose exec backend alembic upgrade head
-
-# Generate a new migration after ORM changes
-docker compose exec backend alembic revision --autogenerate -m "description"
-
-# Frontend type check (rollup native binding requires the container)
-docker compose exec frontend npm run check
+# Or use the management CLI one-liners:
+./openspeakers.sh start          # start with GPU
+./openspeakers.sh start dev      # start core services only (no GPU workers)
+./openspeakers.sh start build    # build images then start (first run)
 
 # Rebuild one worker after Dockerfile changes
-docker compose -f docker-compose.yml -f docker-compose.override.yml \
-               -f docker-compose.gpu.yml up -d --build worker-orpheus
+docker compose up -d --build worker-orpheus
 
 # Tail worker logs
 docker compose logs -f worker-dia
@@ -432,8 +413,17 @@ docker compose logs -f worker-dia
 # Open a shell inside a container
 docker compose exec backend bash
 
-# Smoke-test all deployed models
-docker compose exec worker python scripts/test_all_models.py
+# Run backend tests
+docker compose exec backend pytest tests/ -v
+
+# Frontend type check (rollup native binding requires the container)
+docker compose exec frontend npm run check
+
+# Generate a new migration after ORM changes (migrations apply on next restart)
+docker compose exec backend alembic revision --autogenerate -m "description"
+
+# Smoke-test all deployed models sequentially
+python3 scripts/test_all_models.py
 ```
 
 ### Service URLs
@@ -464,23 +454,21 @@ docker compose exec worker python scripts/test_all_models.py
 To install OpenSpeakers on a machine without internet access:
 
 ```bash
-# On the SOURCE machine (with internet):
+# ── On the SOURCE machine (with internet) ───────────────────────────────────
 
 # 1. Download all model weights
 ./scripts/download-models.sh
 
-# 2. Build Docker images and package everything
+# 2. Build images and bundle everything into a transferable package
 ./scripts/package-offline.sh
 
-# The package is created at ./dist/openspeakers-offline-YYYYMMDD/
-# Transfer it to the target machine:
+# 3. Transfer to the target machine
 rsync -avz --progress dist/openspeakers-offline-YYYYMMDD/ user@target:/opt/openspeakers/
-```
 
-```bash
-# On the TARGET machine (no internet required):
+# ── On the TARGET machine (no internet required) ─────────────────────────────
+
 cd /opt/openspeakers
-./install.sh
+./install.sh        # loads images, creates .env, runs docker compose up -d
 ```
 
 `install.sh` will:
