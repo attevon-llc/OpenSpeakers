@@ -231,8 +231,9 @@
       <p class="font-medium">Voice cloning requires a compatible model</p>
       <p class="mt-1 text-sky-700 dark:text-sky-400/80">
         Currently supported: <strong>Fish Audio S2-Pro</strong>, <strong>VibeVoice 1.5B</strong>,
-        and <strong>Qwen3 TTS</strong>. Upload <strong>5-30 seconds</strong> of clean speech for
-        best results. Avoid background noise or music.
+        <strong>Qwen3 TTS</strong>, <strong>F5-TTS</strong>, <strong>Chatterbox</strong>,
+        <strong>CosyVoice 2.0</strong>, and <strong>Dia 1.6B</strong>.
+        Upload <strong>5-30 seconds</strong> of clean speech for best results. Avoid background noise or music.
       </p>
     </div>
   </div>
