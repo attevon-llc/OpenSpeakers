@@ -34,18 +34,25 @@ QUEUE_MAP: dict[str, str] = {
     "f5-tts": "tts.f5-tts",
     "chatterbox": "tts.f5-tts",
     "cosyvoice-2": "tts.f5-tts",
+    "parler-tts": "tts.f5-tts",
     "dia-1b": "tts.dia",
-    "parler-tts": "tts",  # default queue
+    "kokoro": "tts.kokoro",
 }
 
 # Workers and which queues they consume
 WORKER_QUEUES: dict[str, str] = {
     "worker": "tts",
+    "worker-kokoro": "tts.kokoro",
     "worker-fish": "tts.fish-speech",
     "worker-qwen3": "tts.qwen3",
     "worker-orpheus": "tts.orpheus",
     "worker-dia": "tts.dia",
-    # NOTE: No worker-f5 service exists — f5-tts, chatterbox, cosyvoice-2 have no consumer
+    "worker-f5": "tts.f5-tts",
+}
+
+# Per-model test text overrides (e.g. dialogue models need [S1]/[S2] format)
+MODEL_TEST_TEXT: dict[str, str] = {
+    "dia-1b": "[S1] Hello, this is speaker one testing the dialogue system. [S2] And this is speaker two responding.",
 }
 
 
@@ -101,9 +108,10 @@ def fetch_models() -> list[dict]:
 
 def submit_job(model_id: str) -> str:
     """Submit a TTS job, return job_id."""
+    text = MODEL_TEST_TEXT.get(model_id, TEST_TEXT)
     payload = {
         "model_id": model_id,
-        "text": TEST_TEXT,
+        "text": text,
         "language": "en",
     }
     resp = api_post("/tts/generate", payload)

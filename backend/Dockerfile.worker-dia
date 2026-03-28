@@ -13,11 +13,13 @@ WORKDIR /app
 RUN pip install --no-cache-dir \
     git+https://github.com/nari-labs/dia.git
 
-# Dia may have overwritten torch with a CPU/non-cu128 build; reinstate cu128 version
+# Dia may have overwritten torch/CUDA libs; reinstate cu128 versions.
+# --no-deps is intentionally omitted so nvidia-cuda-cupti and other CUDA libs are also
+# reinstalled — skipping them causes "undefined symbol: cuptiActivityEnableDriverApi".
 RUN pip install --no-cache-dir \
     "torch==2.10.0" "torchaudio==2.10.0" \
     --index-url https://download.pytorch.org/whl/cu128 \
-    --force-reinstall --no-deps
+    --force-reinstall
 
 # OpenSpeakers backend deps
 RUN pip install --no-cache-dir \
