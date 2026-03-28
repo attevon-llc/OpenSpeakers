@@ -1,6 +1,6 @@
 <!-- Job History Page -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { untrack } from 'svelte';
   import { listJobs, getAudioUrl, cancelJob } from '$lib/api/tts';
   import { models } from '$lib/stores/models';
   import AudioPlayer from '$components/AudioPlayer.svelte';
@@ -55,11 +55,13 @@
       };
       if (statusFilter !== 'all') params.status = statusFilter as Parameters<typeof listJobs>[0]['status'];
       if (modelFilter !== 'all') params.model_id = modelFilter;
+      if (searchQuery) params.search = searchQuery;
 
       const res = await listJobs(params);
       jobs = res.jobs as Job[];
       total = res.total;
-    } catch {
+    } catch (err) {
+      console.error('Failed to load job history:', err);
       addToast('error', 'Failed to load job history');
     } finally {
       loading = false;
@@ -68,15 +70,21 @@
 
   function onSearchInput() {
     clearTimeout(searchTimeout);
+    // searchQuery isn't in $effect deps (debounced), so call load() directly
     searchTimeout = setTimeout(() => { page = 1; load(); }, 300);
   }
 
-  function onFilterChange() {
-    page = 1;
-    load();
-  }
-
-  onMount(load);
+  // $effect runs after initial render AND whenever page/statusFilter/modelFilter change.
+  // This replaces onMount for initial load and removes the need to call load() explicitly
+  // from filter/pagination handlers.
+  $effect(() => {
+    // Explicitly track only these — untrack prevents searchQuery inside load() from
+    // becoming a dep (it has its own 300ms debounce via onSearchInput).
+    const _p = page;
+    const _s = statusFilter;
+    const _m = modelFilter;
+    untrack(() => load());
+  });
 
   const totalPages = $derived(Math.ceil(total / PAGE_SIZE));
 
@@ -126,7 +134,7 @@
           class:bg-gray-800={statusFilter !== opt.value}
           class:border-gray-600={statusFilter !== opt.value}
           class:text-gray-400={statusFilter !== opt.value}
-          onclick={() => { statusFilter = opt.value; onFilterChange(); }}
+          onclick={() => { statusFilter = opt.value; page = 1; }}
         >{opt.label}</button>
       {/each}
     </div>
@@ -134,7 +142,7 @@
     <!-- Model filter -->
     <select
       bind:value={modelFilter}
-      onchange={onFilterChange}
+      onchange={() => { page = 1; }}
       class="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:outline-none"
     >
       <option value="all">All models</option>
@@ -227,13 +235,13 @@
       <div class="flex items-center justify-center gap-4 mt-6">
         <button
           disabled={page <= 1}
-          onclick={() => { page--; load(); }}
+          onclick={() => { page--; }}
           class="px-4 py-2 rounded-lg bg-gray-700 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-600 transition-colors text-sm"
         >← Previous</button>
         <span class="text-gray-400 text-sm">Page {page} of {totalPages}</span>
         <button
           disabled={page >= totalPages}
-          onclick={() => { page++; load(); }}
+          onclick={() => { page++; }}
           class="px-4 py-2 rounded-lg bg-gray-700 text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-600 transition-colors text-sm"
         >Next →</button>
       </div>
