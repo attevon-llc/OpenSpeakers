@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type WaveSurferType from 'wavesurfer.js';
   import { onMount } from 'svelte';
   import { theme } from '$stores/theme';
 
@@ -15,107 +14,94 @@
     autoplay?: boolean;
   } = $props();
 
-  let container = $state<HTMLElement | undefined>(undefined);
-  let ws: WaveSurferType | null = null;
-  let WaveSurfer: typeof import('wavesurfer.js').default | null = null;
+  // Native <audio> element — always works, drives all playback state
+  let audioEl = $state<HTMLAudioElement | undefined>(undefined);
+  // WaveSurfer container div
+  let waveContainer = $state<HTMLElement | undefined>(undefined);
+
   let playing = $state(false);
   let currentTime = $state(0);
-  let wsDuration = $state(0);
-  let ready = $state(false);
-  let loadError = $state(false);
+  let audioDuration = $state(0);
 
+  // WaveSurfer instance — linked to audioEl via `media` option for automatic playhead sync
+  let ws: import('wavesurfer.js').default | null = null;
+  let wsReady = $state(false);
+
+  // Sky-blue palette to match app primary color (not purple)
   const waveColors = {
-    dark: { wave: '#6366f1', progress: '#a5b4fc', cursor: '#e0e7ff' },
-    light: { wave: '#4f46e5', progress: '#818cf8', cursor: '#3730a3' },
+    dark:  { wave: '#0369a1', progress: '#38bdf8', cursor: '#7dd3fc' },
+    light: { wave: '#7dd3fc', progress: '#0284c7', cursor: '#0369a1' },
   };
 
-  onMount(async () => {
-    const module = await import('wavesurfer.js');
-    WaveSurfer = module.default;
-    if (src) initWaveSurfer();
+  onMount(() => {
+    if (autoplay && audioEl && src) audioEl.play().catch(() => {});
+    loadWaveSurfer();
+    return () => { ws?.destroy(); ws = null; };
   });
 
-  // Cleanup wavesurfer on component teardown (Svelte 5 $effect cleanup pattern)
-  $effect(() => {
-    return () => {
+  async function loadWaveSurfer(): Promise<void> {
+    if (!src || !waveContainer || !audioEl) return;
+    try {
+      const { default: WaveSurfer } = await import('wavesurfer.js');
+      if (!waveContainer || !audioEl) return; // unmounted during async
       ws?.destroy();
-      ws = null;
-    };
-  });
-
-  function initWaveSurfer(): void {
-    if (!container || !src || !WaveSurfer) return;
-    ws?.destroy();
-    ready = false;
-    loadError = false;
-    playing = false;
-    currentTime = 0;
-    wsDuration = 0;
-
-    const colors = waveColors[theme()] ?? waveColors.dark;
-    ws = WaveSurfer.create({
-      container,
-      waveColor: colors.wave,
-      progressColor: colors.progress,
-      cursorColor: colors.cursor,
-      height: 64,
-      normalize: true,
-      backend: 'MediaElement',  // uses <audio> internally — more compatible than WebAudio
-      url: src,
-    });
-
-    ws.on('ready', (d: number) => {
-      wsDuration = d;
-      ready = true;
-      if (autoplay) ws?.play();
-    });
-    ws.on('timeupdate', (t: number) => { currentTime = t; });
-    ws.on('play', () => { playing = true; });
-    ws.on('pause', () => { playing = false; });
-    ws.on('finish', () => { playing = false; currentTime = 0; });
-    ws.on('error', (err: Error) => {
-      console.error('WaveSurfer error:', err);
-      loadError = true;
-    });
+      wsReady = false;
+      const colors = waveColors[theme()] ?? waveColors.dark;
+      ws = WaveSurfer.create({
+        container: waveContainer,
+        waveColor: colors.wave,
+        progressColor: colors.progress,
+        cursorColor: colors.cursor,
+        height: 64,
+        normalize: true,
+        // Pass the existing <audio> element — WaveSurfer v7 syncs the playhead automatically
+        media: audioEl,
+        url: src,
+      });
+      ws.on('ready', () => { wsReady = true; });
+      ws.on('error', (err: Error) => { console.warn('WaveSurfer:', err.message); });
+    } catch (err) {
+      console.warn('WaveSurfer failed to load:', err);
+    }
   }
 
-  // Re-init when src changes
+  // Reinitialize WaveSurfer when src changes after initial mount
+  let mounted = false;
   $effect(() => {
-    const currentSrc = src;
-    if (currentSrc && container) {
-      initWaveSurfer();
-    }
+    const newSrc = src; // track src reactively
+    if (!mounted) { mounted = true; return; } // skip first run — onMount handles it
+    wsReady = false;
+    ws?.destroy();
+    ws = null;
+    audioDuration = 0;
+    currentTime = 0;
+    playing = false;
+    // Delay so audioEl.src updates first
+    setTimeout(() => loadWaveSurfer(), 0);
   });
 
   // Update waveform colors when theme changes
   $effect(() => {
     const colors = waveColors[theme()] ?? waveColors.dark;
-    ws?.setOptions({
-      waveColor: colors.wave,
-      progressColor: colors.progress,
-      cursorColor: colors.cursor,
-    });
+    ws?.setOptions({ waveColor: colors.wave, progressColor: colors.progress, cursorColor: colors.cursor });
   });
 
   function toggle(): void {
-    if (!ws || !src || disabled) return;
-    ws.playPause();
+    if (!audioEl || !src || disabled) return;
+    if (playing) audioEl.pause();
+    else audioEl.play().catch(() => {});
   }
 
   function seek(seconds: number): void {
-    if (!ws || wsDuration === 0) return;
-    const newTime = Math.max(0, Math.min(wsDuration, currentTime + seconds));
-    ws.seekTo(newTime / wsDuration);
+    if (!audioEl || audioDuration === 0) return;
+    audioEl.currentTime = Math.max(0, Math.min(audioDuration, audioEl.currentTime + seconds));
   }
-
-  function seekToStart(): void { ws?.seekTo(0); }
-  function seekToEnd(): void { ws?.seekTo(1); }
 
   function handleKeydown(e: KeyboardEvent): void {
     if (e.key === 'ArrowLeft') { e.preventDefault(); seek(-5); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); seek(5); }
-    else if (e.key === 'Home') { e.preventDefault(); seekToStart(); }
-    else if (e.key === 'End') { e.preventDefault(); seekToEnd(); }
+    else if (e.key === 'Home') { e.preventDefault(); if (audioEl) audioEl.currentTime = 0; }
+    else if (e.key === 'End') { e.preventDefault(); if (audioEl) audioEl.currentTime = audioDuration; }
     else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); }
   }
 
@@ -125,57 +111,67 @@
     return `${m}:${sec.toString().padStart(2, '0')}`;
   }
 
-  let displayDuration = $derived(duration ?? wsDuration);
+  let displayDuration = $derived(duration ?? audioDuration);
 </script>
 
 <div class="space-y-2">
   {#if src}
-    <!-- WaveSurfer container — primary keyboard target -->
-    {#if !loadError}
-      <div
-        bind:this={container}
-        class="w-full rounded-lg overflow-hidden cursor-pointer
-               {!ready ? 'opacity-50' : ''}"
-        role="application"
-        aria-label="Audio waveform. Space to play/pause, arrow keys to seek ±5s"
-        onkeydown={handleKeydown}
-        tabindex={0}
-      ></div>
-    {/if}
+    <!-- Hidden native <audio> element — drives all playback state reliably -->
+    <!-- svelte-ignore a11y_media_has_caption -->
+    <audio
+      bind:this={audioEl}
+      {src}
+      onloadedmetadata={() => { audioDuration = audioEl?.duration ?? 0; }}
+      ontimeupdate={() => { currentTime = audioEl?.currentTime ?? 0; }}
+      onplay={() => { playing = true; }}
+      onpause={() => { playing = false; }}
+      onended={() => { playing = false; currentTime = 0; }}
+      class="hidden"
+    ></audio>
+
+    <!-- WaveSurfer waveform — linked to audioEl, playhead auto-syncs -->
+    <div
+      bind:this={waveContainer}
+      class="w-full rounded-lg overflow-hidden cursor-pointer
+             {!wsReady ? 'min-h-[64px] bg-gray-800/40' : ''}"
+      role="button"
+      tabindex={0}
+      aria-label="Audio waveform — click to seek, Space to play/pause"
+      onkeydown={handleKeydown}
+      onclick={toggle}
+    >
+      {#if !wsReady}
+        <div class="h-16 flex items-center px-4">
+          <div class="w-full h-6 rounded bg-gray-700/50 animate-pulse"></div>
+        </div>
+      {/if}
+    </div>
 
     <div class="flex items-center gap-3">
-      <!-- Play/Pause button -->
+      <!-- Play/Pause -->
       <button
         onclick={toggle}
-        disabled={disabled || (!ready && !loadError)}
+        {disabled}
         class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-full
                bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed
                text-white transition-colors"
         aria-label={playing ? 'Pause' : 'Play'}
       >
         {#if playing}
-          <!-- Pause icon -->
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
           </svg>
         {:else}
-          <!-- Play icon -->
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
           </svg>
         {/if}
       </button>
 
-      <!-- Keyboard seek hint / status -->
-      <div class="flex-1 text-xs text-gray-500 dark:text-gray-500">
-        {#if loadError}
-          <audio controls src={src} class="h-8 w-full max-w-xs"></audio>
-        {:else if !ready && src}
-          <span class="text-xs text-gray-400 dark:text-gray-600">Loading waveform...</span>
-        {:else}
-          <span class="text-xs text-gray-500 dark:text-gray-600">Click waveform to seek · ←/→ ±5s · Space to play</span>
-        {/if}
-      </div>
+      <!-- Hint -->
+      <span class="flex-1 text-xs text-gray-600 dark:text-gray-600">
+        {#if wsReady}Click waveform to seek · ←/→ ±5s{:else}Loading waveform…{/if}
+      </span>
 
       <!-- Time -->
       <span class="text-xs text-gray-500 dark:text-gray-400 tabular-nums flex-shrink-0 w-16 text-right">
@@ -186,7 +182,7 @@
       <a
         href={src}
         download="tts_output"
-        class="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        class="flex-shrink-0 text-gray-400 hover:text-gray-300 transition-colors"
         aria-label="Download audio"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -196,7 +192,7 @@
       </a>
     </div>
   {:else}
-    <!-- Placeholder state -->
+    <!-- Placeholder -->
     <div class="flex items-center gap-3 opacity-40">
       <div class="flex-shrink-0 w-9 h-9 rounded-full bg-gray-300 dark:bg-gray-600"></div>
       <div class="flex-1 h-16 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>

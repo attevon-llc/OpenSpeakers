@@ -12,12 +12,11 @@
     const { default: WaveSurfer } = await import('wavesurfer.js');
     ws = WaveSurfer.create({
       container,
-      waveColor: theme() === 'dark' ? '#4b5563' : '#9ca3af',
-      progressColor: theme() === 'dark' ? '#6366f1' : '#4f46e5',
+      waveColor: theme() === 'dark' ? '#0369a1' : '#7dd3fc',
+      progressColor: theme() === 'dark' ? '#38bdf8' : '#0284c7',
       height,
       normalize: true,
       interact: false,
-      backend: 'MediaElement',  // more compatible than WebAudio; no full decode required
       url: src,
     });
   });
@@ -32,8 +31,8 @@
 
   $effect(() => {
     ws?.setOptions({
-      waveColor: theme() === 'dark' ? '#4b5563' : '#9ca3af',
-      progressColor: theme() === 'dark' ? '#6366f1' : '#4f46e5',
+      waveColor: theme() === 'dark' ? '#0369a1' : '#7dd3fc',
+      progressColor: theme() === 'dark' ? '#38bdf8' : '#0284c7',
     });
   });
 </script>
