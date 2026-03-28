@@ -32,12 +32,13 @@ Each model group runs in its own container on a dedicated Celery queue:
 
 | Container | Queue | Models | Dockerfile |
 |-----------|-------|--------|------------|
-| `worker` | `tts` | Kokoro, VibeVoice 0.5B, VibeVoice 1.5B | `Dockerfile.worker` |
+| `worker-kokoro` | `tts.kokoro` | Kokoro 82M (standby — always loaded) | `Dockerfile.worker` |
+| `worker` | `tts` | VibeVoice 0.5B, VibeVoice 1.5B | `Dockerfile.worker` |
 | `worker-fish` | `tts.fish-speech` | Fish Audio S2-Pro | `Dockerfile.worker-fish` |
 | `worker-qwen3` | `tts.qwen3` | Qwen3 TTS | `Dockerfile.worker-qwen3` |
 | `worker-orpheus` | `tts.orpheus` | Orpheus 3B | `Dockerfile.worker-orpheus` |
 | `worker-dia` | `tts.dia` | Dia 1.6B | `Dockerfile.worker-dia` |
-| `worker-f5` | `tts.f5-tts` | F5-TTS, Chatterbox, CosyVoice 2.0 | `Dockerfile.worker-f5` |
+| `worker-f5` | `tts.f5-tts` | F5-TTS, Chatterbox, CosyVoice 2.0, Parler TTS Mini | `Dockerfile.worker-f5` |
 
 Queue routing is the single source of truth in `QUEUE_MAP` in
 `backend/app/api/endpoints/tts.py`.
@@ -147,9 +148,8 @@ class MyModel(TTSModelBase):
 ## Development Commands
 
 ```bash
-# Start all services (full GPU stack)
-docker compose -f docker-compose.yml -f docker-compose.override.yml \
-               -f docker-compose.gpu.yml up -d
+# Start all services (COMPOSE_FILE in .env auto-loads gpu+override)
+docker compose up -d
 
 # Start lightweight (no GPU workers)
 docker compose up postgres redis backend frontend
@@ -157,18 +157,14 @@ docker compose up postgres redis backend frontend
 # Run backend tests
 docker compose exec backend pytest tests/ -v
 
-# Apply DB migrations
-docker compose exec backend alembic upgrade head
-
-# Generate new migration
+# Generate new migration (migrations apply automatically on backend startup)
 docker compose exec backend alembic revision --autogenerate -m "description"
 
 # Frontend type check (rollup native binding requires container)
 docker compose exec frontend npm run check
 
 # Rebuild one worker
-docker compose -f docker-compose.yml -f docker-compose.override.yml \
-               -f docker-compose.gpu.yml up -d --build worker-orpheus
+docker compose up -d --build worker-orpheus
 
 # Tail worker logs
 docker compose logs -f worker-orpheus
@@ -177,7 +173,7 @@ docker compose logs -f worker-orpheus
 docker compose exec backend bash
 
 # Smoke test all models
-docker compose exec worker python scripts/test_all_models.py
+python3 scripts/test_all_models.py
 ```
 
 ## Important File Locations
@@ -211,7 +207,7 @@ docker compose exec worker python scripts/test_all_models.py
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GPU_DEVICE_ID` | `0` | CUDA device index for all workers |
-| `MODEL_CACHE_DIR` | `./models` | HuggingFace cache root (mounted as volume) |
+| `MODEL_CACHE_DIR` | `./model_cache` | HuggingFace cache root (mounted as volume) |
 | `AUDIO_OUTPUT_DIR` | `./audio_output` | Generated audio storage |
 | `DATABASE_URL` | auto | PostgreSQL connection string |
 | `CELERY_BROKER_URL` | auto | Redis URL |
@@ -248,6 +244,3 @@ docker compose exec worker python scripts/test_all_models.py
   streaming text input — not true PCM streaming. Currently forced to `non_streaming_mode=True`.
 - **flash-attn in base image**: requires nvcc at build time (not in python:3.12-slim). Main
   worker uses a separate base image with flash-attn pre-built. Secondary workers use sdpa fallback.
-- **F5-TTS, Chatterbox, CosyVoice 2.0, Parler TTS**: model stubs registered in the registry
-  but `worker-f5` container is not yet built/deployed. Implementation is complete; just needs
-  the container to be built and started.

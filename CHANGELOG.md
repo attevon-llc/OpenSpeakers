@@ -19,7 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Qwen3 TTS 1.7B — zero-shot cloning, voice design via natural-language instruct text
 - Orpheus 3B — Llama-based TTS with emotion/intonation tags (`<laugh>`, `<sigh>`, `<gasp>`, etc.); runs via vLLM backend
 - Dia 1.6B — dialogue model with `[S1]`/`[S2]` multi-speaker scripting and nonverbal sound generation
-- Model stubs registered (implementations complete; worker container not yet deployed): F5-TTS, Chatterbox, CosyVoice 2.0, Parler TTS Mini
+- F5-TTS — flow matching TTS, zero-shot cloning, MIT license (`worker-f5` container)
+- Chatterbox — emotion exaggeration control, zero-shot cloning, MIT license (`worker-f5` container)
+- CosyVoice 2.0 — 150 ms latency, zero-shot cloning, voice design via text (`worker-f5` container)
+- Parler TTS Mini — describe any voice in natural language, no reference audio needed (`worker-f5` container)
 
 #### Backend — Core
 - FastAPI backend (port 8080) with Pydantic v2 schemas and full OpenAPI docs
@@ -59,11 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Worker Architecture
 - Dedicated Celery worker containers per model group for dependency and GPU isolation
-- `worker` container (`tts` queue) — Kokoro 82M, VibeVoice 0.5B, VibeVoice 1.5B
+- `worker-kokoro` container (`tts.kokoro` queue) — Kokoro 82M (standby — always loaded)
+- `worker` container (`tts` queue) — VibeVoice 0.5B, VibeVoice 1.5B
 - `worker-fish` container (`tts.fish-speech` queue) — Fish Audio S2-Pro
 - `worker-qwen3` container (`tts.qwen3` queue) — Qwen3 TTS 1.7B
 - `worker-orpheus` container (`tts.orpheus` queue) — Orpheus 3B (vLLM, 2 GB shared memory)
 - `worker-dia` container (`tts.dia` queue) — Dia 1.6B
+- `worker-f5` container (`tts.f5-tts` queue) — F5-TTS, Chatterbox, CosyVoice 2.0, Parler TTS Mini
 - `Dockerfile.base-gpu` — shared GPU base image with PyTorch 2.10+cu128, torchaudio, and NVIDIA env vars
 - `QUEUE_MAP` in `backend/app/api/endpoints/tts.py` as single source of truth for routing
 

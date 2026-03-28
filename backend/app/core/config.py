@@ -38,7 +38,7 @@ class Settings(BaseSettings):
 
     # File paths
     AUDIO_OUTPUT_DIR: str = "./audio_output"
-    MODEL_CACHE_DIR: str = "./models"
+    MODEL_CACHE_DIR: str = "./model_cache"
 
     # Models
     ENABLED_MODELS: str = ""  # comma-separated; empty = all registered models

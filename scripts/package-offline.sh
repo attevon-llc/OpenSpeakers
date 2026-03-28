@@ -4,7 +4,7 @@
 # Creates a self-contained offline install package for OpenSpeakers.
 #
 # What gets bundled:
-#   • All 7 Docker images (saved as compressed .tar.gz files)
+#   • All Docker images (saved as compressed .tar.gz files)
 #   • Model weights from NAS + local model_cache (Kokoro etc.)
 #   • VibeVoice Python source repo
 #   • Config files and compose files

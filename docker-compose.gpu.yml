@@ -1,8 +1,11 @@
 # docker-compose.gpu.yml
 # Optional overlay for GPU acceleration (NVIDIA)
 #
-# Apply manually or via a startup script:
-#   docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gpu.yml up
+# Normally auto-applied via COMPOSE_FILE in .env:
+#   docker compose up -d
+#
+# For offline/air-gapped installs, apply manually:
+#   docker compose -f docker-compose.yml -f docker-compose.offline.yml -f docker-compose.gpu.yml up -d
 #
 # Configuration:
 #   GPU_DEVICE_ID  — which GPU to use for TTS inference (default: 0)

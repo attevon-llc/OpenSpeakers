@@ -382,7 +382,7 @@ Copy `.env.example` to `.env` and adjust as needed:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GPU_DEVICE_ID` | `0` | CUDA device index for all workers |
-| `MODEL_CACHE_DIR` | `./models` | HuggingFace model cache root (volume-mounted) |
+| `MODEL_CACHE_DIR` | `./model_cache` | HuggingFace model cache root (volume-mounted) |
 | `AUDIO_OUTPUT_DIR` | `./audio_output` | Generated audio file storage |
 | `POSTGRES_PASSWORD` | `openspeakers` | PostgreSQL password |
 | `HF_TOKEN` | — | HuggingFace token (required for gated models: Orpheus 3B) |
@@ -476,7 +476,7 @@ cd /opt/openspeakers
 2. Load all Docker images from `images/*.tar.gz`
 3. Create `.env` from the example template
 4. Start all services with `docker compose up -d`
-5. Run Alembic database migrations
+5. Wait for backend readiness (migrations run automatically on startup)
 
 ---
 

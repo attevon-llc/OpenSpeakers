@@ -56,11 +56,11 @@
 #   ./openspeakers.sh purge               # Remove all containers, volumes, images (!)
 #
 # WORKERS & QUEUES
-#   worker          tts              Kokoro, VibeVoice 0.5B, VibeVoice 1.5B
-#   worker-kokoro   tts.kokoro       Kokoro dedicated (OpenAI-compat endpoint)
+#   worker          tts              VibeVoice 0.5B, VibeVoice 1.5B
+#   worker-kokoro   tts.kokoro       Kokoro 82M dedicated (standby; OpenAI-compat endpoint)
 #   worker-fish     tts.fish-speech  Fish Audio S2-Pro
 #   worker-qwen3    tts.qwen3        Qwen3 TTS 1.7B
-#   worker-f5       tts.f5-tts       F5-TTS, Chatterbox, CosyVoice 2.0
+#   worker-f5       tts.f5-tts       F5-TTS, Chatterbox, CosyVoice 2.0, Parler TTS Mini
 #   worker-orpheus  tts.orpheus      Orpheus 3B
 #   worker-dia      tts.dia          Dia 1.6B
 #
@@ -662,11 +662,11 @@ show_help() {
     echo "  purge                   Remove all containers, volumes, and images"
     echo ""
     echo -e "${CYAN}Workers:${NC}"
-    echo "  worker          tts queue       Kokoro, VibeVoice 0.5B, VibeVoice 1.5B"
-    echo "  worker-kokoro   tts.kokoro      Kokoro (dedicated — OpenAI-compat endpoint)"
+    echo "  worker          tts queue       VibeVoice 0.5B, VibeVoice 1.5B"
+    echo "  worker-kokoro   tts.kokoro      Kokoro 82M (standby — OpenAI-compat endpoint)"
     echo "  worker-fish     tts.fish-speech Fish Audio S2-Pro"
     echo "  worker-qwen3    tts.qwen3       Qwen3 TTS 1.7B"
-    echo "  worker-f5       tts.f5-tts      F5-TTS, Chatterbox, CosyVoice 2.0"
+    echo "  worker-f5       tts.f5-tts      F5-TTS, Chatterbox, CosyVoice 2.0, Parler TTS Mini"
     echo "  worker-orpheus  tts.orpheus     Orpheus 3B"
     echo "  worker-dia      tts.dia         Dia 1.6B"
     echo ""

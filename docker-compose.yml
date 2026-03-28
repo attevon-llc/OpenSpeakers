@@ -2,9 +2,9 @@
 # This file contains common configuration for all environments
 #
 # Usage:
-#   Development:  docker compose up  (auto-loads docker-compose.override.yml)
-#   Production:   docker compose -f docker-compose.yml -f docker-compose.prod.yml up
-#   GPU overlay:  docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.gpu.yml up
+#   Development/GPU:  docker compose up -d
+#     (COMPOSE_FILE in .env auto-loads override + gpu overlays)
+#   Offline:  docker compose -f docker-compose.yml -f docker-compose.offline.yml -f docker-compose.gpu.yml up -d
 
 services:
   postgres:
@@ -90,8 +90,8 @@ services:
       --hostname tts-worker@%h
       -E
     volumes:
-      - ${MODEL_CACHE_DIR:-./models}/huggingface:/home/appuser/.cache/huggingface
-      - ${MODEL_CACHE_DIR:-./models}/torch:/home/appuser/.cache/torch
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/home/appuser/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./model_cache}/torch:/home/appuser/.cache/torch
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
     environment:
       - POSTGRES_HOST=postgres
@@ -131,8 +131,8 @@ services:
       --hostname kokoro-worker@%h
       -E
     volumes:
-      - ${MODEL_CACHE_DIR:-./models}/huggingface:/home/appuser/.cache/huggingface
-      - ${MODEL_CACHE_DIR:-./models}/torch:/home/appuser/.cache/torch
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/home/appuser/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./model_cache}/torch:/home/appuser/.cache/torch
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
     environment:
       - POSTGRES_HOST=postgres
@@ -169,7 +169,7 @@ services:
       --hostname fish-worker@%h
       -E
     volumes:
-      - ${MODEL_CACHE_DIR:-./models}/huggingface:/root/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
     environment:
       - POSTGRES_HOST=postgres
@@ -204,7 +204,7 @@ services:
       --hostname qwen3-worker@%h
       -E
     volumes:
-      - ${MODEL_CACHE_DIR:-./models}/huggingface:/root/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
     environment:
       - POSTGRES_HOST=postgres
@@ -239,7 +239,7 @@ services:
       --hostname f5-worker@%h
       -E
     volumes:
-      - ${MODEL_CACHE_DIR:-./models}/huggingface:/root/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
       - /mnt/nas/models:/models
     environment:
@@ -276,7 +276,7 @@ services:
       --hostname orpheus-worker@%h
       -E
     volumes:
-      - ${MODEL_CACHE_DIR:-./models}/huggingface:/root/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
       - /mnt/nas/models:/models
     environment:
@@ -312,7 +312,7 @@ services:
       --hostname dia-worker@%h
       -E
     volumes:
-      - ${MODEL_CACHE_DIR:-./models}/huggingface:/root/.cache/huggingface
+      - ${MODEL_CACHE_DIR:-./model_cache}/huggingface:/root/.cache/huggingface
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
       - /mnt/nas/models:/models
     environment:
