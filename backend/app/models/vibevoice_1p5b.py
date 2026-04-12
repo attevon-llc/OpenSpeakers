@@ -47,6 +47,12 @@ class VibeVoice1p5BModel(TTSModelBase):
     ]
     hf_repo = "microsoft/VibeVoice-1.5B"
     vram_gb_estimate = 12.0
+    supports_dialogue = True
+    dialogue_format = "vibevoice"
+    help_text = (
+        "High-quality long-form TTS. Multi-speaker dialogue via 'Speaker 0:' / 'Speaker 1:' "
+        "prefixes. Zero-shot voice cloning. 10 languages. Slower generation (~12 GB VRAM)."
+    )
 
     SAMPLE_RATE = 24_000
 

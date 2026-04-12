@@ -58,8 +58,16 @@
               voice cloning
             </span>
           {/if}
+          {#if selected.supports_dialogue}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+              dialogue
+            </span>
+          {/if}
         </div>
         <p class="text-gray-500 dark:text-gray-400 mt-0.5 truncate">{selected.description}</p>
+        {#if selected.help_text}
+          <p class="text-xs text-gray-400 dark:text-gray-500 mt-1 leading-relaxed">{selected.help_text}</p>
+        {/if}
         <div class="flex gap-2 mt-1 text-xs text-gray-400">
           <span>Languages: {selected.supported_languages.slice(0, 6).join(', ')}{selected.supported_languages.length > 6 ? '...' : ''}</span>
         </div>

@@ -31,6 +31,13 @@ class DiaTTSModel(TTSModelBase):
     supported_languages = ["en"]
     hf_repo = "nari-labs/Dia-1.6B-0626"
     vram_gb_estimate = 10.0
+    supports_dialogue = True
+    dialogue_format = "dia"
+    help_text = (
+        "Multi-speaker dialogue with [S1]/[S2] tags. Supports nonverbal sounds: "
+        "(laughs), (sighs), (coughs), (clears throat), (whispers). "
+        "Slow generation (~30s). English only. ~10 GB VRAM."
+    )
 
     def __init__(self) -> None:
         self._model = None

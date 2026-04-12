@@ -25,6 +25,10 @@ class ChatterboxModel(TTSModelBase):
     supported_languages = ["en"]
     hf_repo = "ResembleAI/chatterbox"
     vram_gb_estimate = 5.0
+    help_text = (
+        "Expressive TTS with exaggeration and CFG weight controls. "
+        "Voice cloning via reference audio. English. ~5 GB VRAM."
+    )
 
     def __init__(self) -> None:
         self._model = None

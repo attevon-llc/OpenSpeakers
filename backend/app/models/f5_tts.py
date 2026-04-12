@@ -26,6 +26,10 @@ class F5TTSModel(TTSModelBase):
     supported_languages = ["en", "zh", "de", "fr", "es", "pt", "hi", "ar", "ru", "ja", "ko", "nl"]
     hf_repo = "SWivid/F5-TTS"
     vram_gb_estimate = 3.0
+    help_text = (
+        "Fast flow-matching TTS (15x realtime). Reference-audio voice cloning. "
+        "MIT license. English focused. Requires reference audio for best results."
+    )
 
     def __init__(self) -> None:
         self._model = None

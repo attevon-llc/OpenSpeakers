@@ -11,6 +11,9 @@ class ModelInfo(BaseModel):
     supports_streaming: bool
     supports_speed: bool = False
     supports_pitch: bool = False
+    supports_dialogue: bool = False
+    dialogue_format: str = ""
+    help_text: str = ""
     supported_languages: list[str]
     hf_repo: str
     vram_gb_estimate: float

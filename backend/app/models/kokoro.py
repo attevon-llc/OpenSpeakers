@@ -57,6 +57,10 @@ class KokoroModel(TTSModelBase):
     supported_languages = ["en", "fr", "ja", "ko", "zh", "hi", "pt", "it", "es", "pl"]
     hf_repo = "hexgrad/Kokoro-82M"
     vram_gb_estimate = 0.5
+    help_text = (
+        "Fastest model (~1s). 50+ preset voices. English only. No voice cloning. "
+        "Best for quick previews and low-latency applications."
+    )
 
     def __init__(self) -> None:
         self._pipelines: dict[str, Any] = {}  # lang_code -> KPipeline

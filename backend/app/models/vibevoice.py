@@ -67,6 +67,10 @@ class VibeVoiceModel(TTSModelBase):
     ]
     hf_repo = "microsoft/VibeVoice-Realtime-0.5B"
     vram_gb_estimate = 4.5
+    help_text = (
+        "Real-time streaming with 12 built-in voices. Good balance of speed and quality. "
+        "10 languages. No voice cloning — use VibeVoice 1.5B for that."
+    )
 
     def __init__(self) -> None:
         self._model = None

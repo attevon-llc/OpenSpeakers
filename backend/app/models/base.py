@@ -58,6 +58,9 @@ class TTSModelBase(ABC):
     supports_streaming: bool = False
     supports_speed: bool = False  # True = speed param is actively used
     supports_pitch: bool = False  # True = pitch param is actively used
+    supports_dialogue: bool = False  # True = multi-speaker [S1]/[S2] or Speaker 0:/1:
+    dialogue_format: str = ""  # "dia" | "vibevoice" — model-specific syntax
+    help_text: str = ""  # Selection guidance: speed, quality, use cases
     supported_languages: list[str] = ["en"]
     hf_repo: str = ""
     vram_gb_estimate: float = 4.0
@@ -111,6 +114,9 @@ class TTSModelBase(ABC):
             "supports_streaming": self.supports_streaming,
             "supports_speed": self.supports_speed,
             "supports_pitch": self.supports_pitch,
+            "supports_dialogue": self.supports_dialogue,
+            "dialogue_format": self.dialogue_format,
+            "help_text": self.help_text,
             "supported_languages": self.supported_languages,
             "hf_repo": self.hf_repo,
             "vram_gb_estimate": self.vram_gb_estimate,

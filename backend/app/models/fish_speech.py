@@ -46,6 +46,10 @@ class FishSpeechModel(TTSModelBase):
     supported_languages = ["en", "zh", "ja", "ko", "fr", "de", "ar", "es", "ru", "nl"]
     hf_repo = "fishaudio/s2-pro"
     vram_gb_estimate = 22.0
+    help_text = (
+        "High-quality multilingual TTS (80+ languages). Emotion tags like [happy], [sad]. "
+        "Zero-shot voice cloning. Large model (~22 GB VRAM). Non-commercial license."
+    )
 
     def __init__(self) -> None:
         self._engine: Any = None

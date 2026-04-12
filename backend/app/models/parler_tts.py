@@ -55,6 +55,11 @@ class ParlerTTSModel(TTSModelBase):
     supported_languages = ["en"]
     hf_repo = "parler-tts/parler-tts-mini-v1"
     vram_gb_estimate = 3.0
+    help_text = (
+        "Generate any voice from a text description — no reference audio needed. "
+        "Describe the speaker (age, gender, tone, pace) and it creates a matching voice. "
+        "English only. ~3 GB VRAM."
+    )
 
     def __init__(self) -> None:
         self._model = None

@@ -5,7 +5,8 @@
   import AudioPlayer from '$components/AudioPlayer.svelte';
   import { addToast } from '$lib/stores/toasts';
 
-  let textInput = $state('');
+  let entries = $state<Array<{ id: number; text: string }>>([{ id: 0, text: '' }]);
+  let nextId = $state(1);
   let selectedModelId = $state('');
   let outputFormat = $state('wav');
   let language = $state('en');
@@ -25,7 +26,7 @@
   let fileInputEl = $state<HTMLInputElement | undefined>(undefined);
 
   const lines = $derived(
-    textInput.split('\n').map((l) => l.trim()).filter((l) => l.length > 0)
+    entries.map((e) => e.text.trim()).filter((t) => t.length > 0)
   );
 
   // Initialize selectedModelId from first available model
@@ -35,10 +36,34 @@
     }
   });
 
+  function addEntry() {
+    if (entries.length >= 100) {
+      addToast('warning', 'Maximum 100 entries per batch');
+      return;
+    }
+    entries = [...entries, { id: nextId++, text: '' }];
+  }
+
+  function removeEntry(id: number) {
+    if (entries.length <= 1) return;
+    entries = entries.filter((e) => e.id !== id);
+  }
+
+  function moveEntry(id: number, direction: -1 | 1) {
+    const idx = entries.findIndex((e) => e.id === id);
+    const target = idx + direction;
+    if (target < 0 || target >= entries.length) return;
+    const copy = [...entries];
+    [copy[idx], copy[target]] = [copy[target], copy[idx]];
+    entries = copy;
+  }
+
   async function handleFileUpload(file: File | null | undefined) {
     if (!file) return;
     const text = await file.text();
-    textInput = text;
+    const fileLines = text.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+    if (fileLines.length === 0) return;
+    entries = fileLines.slice(0, 100).map((t) => ({ id: nextId++, text: t }));
   }
 
   async function handleGenerate() {
@@ -106,6 +131,7 @@
     batchJobs = [];
     batchComplete = false;
     generating = false;
+    entries = [{ id: nextId++, text: '' }];
     clearInterval(pollInterval);
   }
 
@@ -124,38 +150,84 @@
 
 <div class="max-w-4xl mx-auto p-6">
   <h1 class="text-2xl font-bold text-white mb-2">Batch Generation</h1>
-  <p class="text-gray-400 text-sm mb-6">Generate audio for multiple lines of text at once. One line = one job.</p>
+  <p class="text-gray-400 text-sm mb-6">Generate audio for multiple text entries at once. Each entry becomes a separate audio file.</p>
 
   {#if !batchId}
     <!-- Input form -->
     <div class="space-y-4">
-      <!-- Text input area -->
-      <div>
-        <div class="flex items-center justify-between mb-2">
-          <label for="batch-text" class="text-sm font-medium text-gray-300">Text lines</label>
-          <div class="flex items-center gap-3">
-            <span class="text-xs text-gray-500">{lines.length} line{lines.length !== 1 ? 's' : ''}</span>
-            <button
-              onclick={() => fileInputEl?.click()}
-              class="text-xs text-primary-400 hover:text-primary-300 transition-colors"
-            >Upload .txt file</button>
-            <input
-              bind:this={fileInputEl}
-              type="file"
-              accept=".txt"
-              class="hidden"
-              onchange={(e) => handleFileUpload(e.currentTarget.files?.[0])}
-            />
-          </div>
+      <!-- Entry list header -->
+      <div class="flex items-center justify-between">
+        <label class="text-sm font-medium text-gray-300">Text entries</label>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-gray-500">{entries.length} / 100</span>
+          <button
+            onclick={() => fileInputEl?.click()}
+            class="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+          >Upload .txt file</button>
+          <input
+            bind:this={fileInputEl}
+            type="file"
+            accept=".txt"
+            class="hidden"
+            onchange={(e) => handleFileUpload(e.currentTarget.files?.[0])}
+          />
         </div>
-        <textarea
-          id="batch-text"
-          bind:value={textInput}
-          placeholder="Enter one line of text per audio file to generate...&#10;&#10;Line 1 becomes audio file 1&#10;Line 2 becomes audio file 2&#10;(Maximum 100 lines)"
-          rows={10}
-          class="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:border-primary-500 focus:outline-none resize-none font-mono text-sm"
-        ></textarea>
       </div>
+
+      <!-- Dynamic entry list -->
+      <div class="space-y-2">
+        {#each entries as entry, i (entry.id)}
+          <div class="flex items-start gap-2 group">
+            <!-- Number + move buttons -->
+            <div class="flex flex-col items-center gap-0.5 pt-2 shrink-0 w-8">
+              <span class="text-xs text-gray-500 font-mono">{i + 1}</span>
+              <div class="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onclick={() => moveEntry(entry.id, -1)}
+                  disabled={i === 0}
+                  class="text-gray-500 hover:text-gray-300 disabled:opacity-20 disabled:cursor-not-allowed p-0 leading-none text-xs"
+                  aria-label="Move up"
+                >&#9650;</button>
+                <button
+                  onclick={() => moveEntry(entry.id, 1)}
+                  disabled={i === entries.length - 1}
+                  class="text-gray-500 hover:text-gray-300 disabled:opacity-20 disabled:cursor-not-allowed p-0 leading-none text-xs"
+                  aria-label="Move down"
+                >&#9660;</button>
+              </div>
+            </div>
+
+            <!-- Textarea -->
+            <textarea
+              bind:value={entry.text}
+              placeholder="Enter text for audio file {i + 1}…"
+              rows={2}
+              class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:border-primary-500 focus:outline-none resize-none text-sm"
+            ></textarea>
+
+            <!-- Remove button -->
+            <button
+              onclick={() => removeEntry(entry.id)}
+              disabled={entries.length <= 1}
+              class="shrink-0 mt-2 p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-900/20 transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+              aria-label="Remove entry"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        {/each}
+      </div>
+
+      <!-- Add entry button -->
+      <button
+        onclick={addEntry}
+        disabled={entries.length >= 100}
+        class="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-600 text-gray-400 hover:border-primary-500 hover:text-primary-400 transition-colors text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        + Add entry
+      </button>
 
       <!-- Controls row -->
       <div class="grid grid-cols-2 md:grid-cols-3 gap-3">

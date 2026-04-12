@@ -13,6 +13,9 @@ export interface ModelInfo {
   status: 'loaded' | 'available' | 'loading' | 'unknown';
   supports_speed: boolean;
   supports_pitch: boolean;
+  supports_dialogue: boolean;
+  dialogue_format: string;
+  help_text: string;
 }
 
 export async function listModels(): Promise<ModelInfo[]> {

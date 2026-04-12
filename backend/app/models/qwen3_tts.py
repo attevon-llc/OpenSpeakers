@@ -66,6 +66,10 @@ class Qwen3TTSModel(TTSModelBase):
     supported_languages = ["en", "zh", "ja", "ko", "fr", "de", "es", "pt", "it", "ru"]
     hf_repo = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
     vram_gb_estimate = 10.0
+    help_text = (
+        "Expressive multilingual TTS from Alibaba. Instruct mode for style control. "
+        "Voice cloning. Good quality but slower than Kokoro."
+    )
 
     def __init__(self) -> None:
         self._custom_voice_model: Any = None

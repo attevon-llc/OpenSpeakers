@@ -325,11 +325,14 @@ class ModelManager:
 
     def _clear_gpu_cache(self) -> None:
         try:
+            import gc
+
+            gc.collect()
             import torch
 
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-                logger.debug("GPU cache cleared")
+                logger.debug("GPU cache cleared (gc.collect + empty_cache)")
         except ImportError:
             pass
 

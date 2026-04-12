@@ -6,6 +6,7 @@
 
   let filterStreaming = $state(false);
   let filterCloning = $state(false);
+  let filterDialogue = $state(false);
   let searchQuery = $state('');
 
   onMount(() => {
@@ -17,6 +18,7 @@
     models.filter((m) => {
       if (filterStreaming && !m.supports_streaming) return false;
       if (filterCloning && !m.supports_voice_cloning) return false;
+      if (filterDialogue && !m.supports_dialogue) return false;
       if (
         searchQuery &&
         !m.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -98,6 +100,10 @@
       <input type="checkbox" bind:checked={filterCloning} class="accent-primary-500" />
       Voice Cloning
     </label>
+    <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
+      <input type="checkbox" bind:checked={filterDialogue} class="accent-primary-500" />
+      Dialogue
+    </label>
   </div>
 
   {#if modelsLoading() && models.length === 0}
@@ -157,7 +163,15 @@
             {#if (model as ModelInfo & { supports_pitch?: boolean }).supports_pitch}
               <span class="text-xs bg-gray-700 text-gray-300 border border-gray-600 px-2 py-0.5 rounded-full">Pitch Control</span>
             {/if}
+            {#if model.supports_dialogue}
+              <span class="text-xs bg-amber-900/40 text-amber-300 border border-amber-700/50 px-2 py-0.5 rounded-full">Dialogue</span>
+            {/if}
           </div>
+
+          <!-- Help text -->
+          {#if model.help_text}
+            <p class="text-xs text-gray-400 leading-relaxed border-l-2 border-gray-600 pl-3">{model.help_text}</p>
+          {/if}
 
           <!-- Languages -->
           {#if model.supported_languages?.length > 0}

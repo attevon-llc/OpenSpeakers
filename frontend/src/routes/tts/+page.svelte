@@ -3,6 +3,7 @@
   import { onMount, tick } from 'svelte';
   import ModelSelector from '$components/ModelSelector.svelte';
   import ModelParams from '$components/ModelParams.svelte';
+  import DialogueEditor from '$components/DialogueEditor.svelte';
   import GpuStatus from '$components/GpuStatus.svelte';
   import AudioPlayer from '$components/AudioPlayer.svelte';
   import JobProgress from '$components/JobProgress.svelte';
@@ -75,6 +76,8 @@
     { code: 'nl', name: 'Dutch' },
   ];
 
+  let dialogueMode = $state(false);
+
   let charCount = $derived(text.length);
   let canGenerate = $derived(!!selectedModel && !!text.trim() && !generating);
   let hasVoices = $derived(builtinVoices.length > 0 || clonedVoices.length > 0);
@@ -83,6 +86,13 @@
   // Persist selected model
   $effect(() => {
     if (selectedModel) localStorage.setItem('openspeakers:selected_model', selectedModel);
+  });
+
+  // Turn off dialogue mode when switching to a non-dialogue model
+  $effect(() => {
+    if (selectedModelInfo && !selectedModelInfo.supports_dialogue) {
+      dialogueMode = false;
+    }
   });
 
   // Auto-select first model once models load. Safe now — models is Svelte 5 $state,
@@ -337,17 +347,34 @@
 
       <!-- Text input -->
       <div class="card p-4 space-y-2">
-        <label class="label" for="tts-text">Text</label>
-        <textarea
-          id="tts-text"
-          bind:this={textareaEl}
-          bind:value={text}
-          rows={5}
-          placeholder="Enter the text you want to synthesize... (Ctrl+Enter to generate)"
-          disabled={generating}
-          class="input resize-none"
-          maxlength={4096}
-        ></textarea>
+        <div class="flex items-center justify-between">
+          <label class="label" for="tts-text">Text</label>
+          {#if selectedModelInfo?.supports_dialogue}
+            <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+              <input type="checkbox" bind:checked={dialogueMode} disabled={generating} class="accent-amber-500" />
+              Dialogue mode
+            </label>
+          {/if}
+        </div>
+
+        {#if dialogueMode && selectedModelInfo?.supports_dialogue}
+          <DialogueEditor
+            dialogueFormat={selectedModelInfo.dialogue_format}
+            bind:value={text}
+            disabled={generating}
+          />
+        {:else}
+          <textarea
+            id="tts-text"
+            bind:this={textareaEl}
+            bind:value={text}
+            rows={5}
+            placeholder="Enter the text you want to synthesize... (Ctrl+Enter to generate)"
+            disabled={generating}
+            class="input resize-none"
+            maxlength={4096}
+          ></textarea>
+        {/if}
         <div class="text-xs text-gray-400 dark:text-gray-600 text-right">
           {charCount} / 4096
         </div>

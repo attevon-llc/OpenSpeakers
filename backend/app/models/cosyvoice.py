@@ -27,6 +27,10 @@ class CosyVoice2Model(TTSModelBase):
     supported_languages = ["en", "zh", "ja", "ko", "fr", "de", "es", "pt", "ar", "ru"]
     hf_repo = "FunAudioLLM/CosyVoice2-0.5B"
     vram_gb_estimate = 5.0
+    help_text = (
+        "Ultra-low latency (150ms). Voice design via text description or reference audio. "
+        "Multilingual. Zero-shot cloning. ~5 GB VRAM."
+    )
 
     def __init__(self) -> None:
         self._model = None

@@ -42,6 +42,11 @@ class OrpheusTTSModel(TTSModelBase):
     supported_languages = ["en"]
     hf_repo = "canopylabs/orpheus-3b-0.1-ft"
     vram_gb_estimate = 7.0
+    help_text = (
+        "Emotional speech with inline tags: <laugh>, <sigh>, <gasp>, <cough>. "
+        "7 built-in voices (zoe, zac, jess, leo, mia, julia, leah). English only. "
+        "Powered by vLLM — first load is slow but subsequent generations are fast."
+    )
 
     def __init__(self) -> None:
         self._model = None
