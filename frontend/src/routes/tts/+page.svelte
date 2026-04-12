@@ -215,7 +215,9 @@
   function _scheduleChunk(float32: Float32Array, sampleRate: number): void {
     if (!_audioCtx) return;
     const buffer = _audioCtx.createBuffer(1, float32.length, sampleRate);
-    buffer.copyToChannel(float32, 0);
+    // Copy chunk into the buffer's own channel data (avoids Float32Array<ArrayBuffer>
+    // vs <ArrayBufferLike> type mismatch from lib.dom 2024+).
+    buffer.getChannelData(0).set(float32);
     const source = _audioCtx.createBufferSource();
     source.buffer = buffer;
     source.connect(_audioCtx.destination);

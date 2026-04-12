@@ -137,14 +137,18 @@
 
     <!-- Waveform area: overlay keeps loading state above WaveSurfer's canvas -->
     <div class="relative w-full">
-      <!-- WaveSurfer renders into this div — always in DOM so it can measure width -->
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
+      <!-- WaveSurfer renders into this div — always in DOM so it can measure width. -->
+      <!-- role=slider is honest: this IS a seek scrubber, and slider allows tabindex=0. -->
       <div
         bind:this={waveContainer}
         class="w-full min-h-[64px] rounded-lg overflow-hidden cursor-pointer"
-        role="application"
+        role="slider"
         tabindex={0}
         aria-label="Audio waveform — click to seek, ←/→ ±5s, Space to play/pause"
+        aria-valuemin={0}
+        aria-valuemax={audioDuration || 0}
+        aria-valuenow={currentTime}
+        aria-valuetext={`${currentTime.toFixed(1)} of ${(audioDuration || 0).toFixed(1)} seconds`}
         onkeydown={handleKeydown}
       ></div>
       <!-- Loading overlay sits on top until WaveSurfer fires 'ready' -->

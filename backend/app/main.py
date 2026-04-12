@@ -47,18 +47,42 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI):
     logger.info("Starting OpenSpeakers backend (env=%s)", settings.ENVIRONMENT)
 
-    # Run DB migrations
+    # Run DB migrations. A failure here means the DB is unreachable or the schema
+    # is broken — continuing would just produce cryptic ORM errors on the first
+    # query. Fail fast so the container restart loop surfaces the problem.
     try:
         from app.db.migrations import run_migrations
 
         run_migrations()
     except Exception:
-        logger.exception("Migration failed — the database may be unavailable. Continuing.")
+        logger.exception("Migration failed — refusing to start with an inconsistent DB")
+        raise
 
     # Ensure audio output directory exists
     from pathlib import Path
 
     Path(settings.AUDIO_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+
+    # Surface models that will silently route to the default "tts" queue because
+    # they lack a QUEUE_MAP entry. Not fatal — the default queue is valid — but a
+    # missing entry usually means a new model was added and the routing wasn't
+    # updated to match the worker that actually has its deps installed.
+    from app.api.endpoints.tts import QUEUE_MAP
+    from app.models.manager import ModelManager
+
+    registered = set(ModelManager.get_instance().registered_ids)
+    unrouted = sorted(m for m in registered if m not in QUEUE_MAP)
+    if unrouted:
+        logger.warning(
+            "Models without explicit QUEUE_MAP entry (falling back to 'tts' queue): %s",
+            ", ".join(unrouted),
+        )
+    stale = sorted(set(QUEUE_MAP) - registered)
+    if stale:
+        logger.warning(
+            "QUEUE_MAP has entries for unregistered models: %s",
+            ", ".join(stale),
+        )
 
     logger.info("OpenSpeakers backend ready")
     yield
@@ -83,12 +107,7 @@ app.add_middleware(RequestIDMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:5200",  # Mapped dev port
-        "http://localhost:3000",
-        "http://frontend:5173",  # Docker network
-    ],
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

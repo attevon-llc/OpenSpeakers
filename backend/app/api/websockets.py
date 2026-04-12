@@ -35,7 +35,7 @@ import redis.asyncio as aioredis
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
 
-from app.api.endpoints.system import _get_nvidia_smi_stats
+from app.api.endpoints.system import _get_nvidia_smi_stats, _get_pynvml_info
 from app.core.config import settings
 from app.db.models import JobStatus, TTSJob
 from app.models.manager import ModelManager
@@ -162,30 +162,33 @@ async def job_progress_ws(websocket: WebSocket, job_id: str) -> None:
 
 
 def _build_gpu_stats_payload() -> dict:
-    """Build the GPU stats payload, reusing nvidia-smi helper from system endpoint."""
+    """Build the GPU stats payload using pynvml (primary) or torch (fallback)."""
     manager = ModelManager.get_instance()
+    device_id = settings.GPU_DEVICE_ID
 
-    gpu_info: dict = {}
-    try:
-        import torch
+    # Try pynvml first — works without torch in the API container
+    gpu_info = _get_pynvml_info(device_id)
 
-        if torch.cuda.is_available():
-            device_id = settings.GPU_DEVICE_ID
-            gpu_info = {
-                "available": True,
-                "device_id": device_id,
-                "device_name": torch.cuda.get_device_name(device_id),
-                "vram_total_gb": round(
-                    torch.cuda.get_device_properties(device_id).total_memory / 1e9, 1
-                ),
-                "vram_used_gb": round(torch.cuda.memory_allocated(device_id) / 1e9, 2),
-                "vram_reserved_gb": round(torch.cuda.memory_reserved(device_id) / 1e9, 2),
-                "nvidia_smi": _get_nvidia_smi_stats(device_id),
-            }
-        else:
+    if not gpu_info:
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                gpu_info = {
+                    "available": True,
+                    "device_id": device_id,
+                    "device_name": torch.cuda.get_device_name(device_id),
+                    "vram_total_gb": round(
+                        torch.cuda.get_device_properties(device_id).total_memory / 1e9, 1
+                    ),
+                    "vram_used_gb": round(torch.cuda.memory_allocated(device_id) / 1e9, 2),
+                    "vram_reserved_gb": round(torch.cuda.memory_reserved(device_id) / 1e9, 2),
+                    "nvidia_smi": _get_nvidia_smi_stats(device_id),
+                }
+            else:
+                gpu_info = {"available": False}
+        except ImportError:
             gpu_info = {"available": False}
-    except ImportError:
-        gpu_info = {"available": False, "note": "torch not installed in API container"}
 
     return {
         "type": "gpu_stats",

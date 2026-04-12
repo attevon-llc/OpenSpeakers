@@ -14,6 +14,21 @@ with GPU hot-swap, async job queuing, real-time streaming, and a modern SvelteKi
 
 ---
 
+## Screenshots
+
+| | |
+|:---:|:---:|
+| ![Home](docs/screenshots/home.png) | ![TTS](docs/screenshots/tts.png) |
+| **Home** — landing page with model gallery | **TTS** — main generation page with per-model parameters |
+| ![Voice Clone](docs/screenshots/clone.png) | ![Compare](docs/screenshots/compare.png) |
+| **Clone Voice** — drag-and-drop reference audio + voice library | **Compare** — run the same text through multiple models side-by-side |
+| ![Batch](docs/screenshots/batch.png) | ![History](docs/screenshots/history.png) |
+| **Batch** — submit up to 100 lines and download as a ZIP | **History** — searchable, filterable job history |
+| ![Models](docs/screenshots/models.png) | ![Settings](docs/screenshots/settings.png) |
+| **Models** — capability browser with VRAM estimates | **Settings** — live GPU stats, output format, OpenAI API config |
+
+---
+
 ## Key Features
 
 ### Generation
@@ -209,8 +224,8 @@ Swagger UI: **http://localhost:8080/docs**
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/system/health` | Health check |
-| `GET` | `/api/system/gpu` | GPU stats snapshot |
+| `GET` | `/health` | Liveness probe |
+| `GET` | `/api/system/info` | GPU + disk + model registry snapshot |
 
 ### OpenAI Compatibility
 

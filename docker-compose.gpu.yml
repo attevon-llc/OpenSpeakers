@@ -12,6 +12,7 @@
 
 services:
   worker:
+    runtime: nvidia
     deploy:
       resources:
         reservations:
@@ -24,6 +25,7 @@ services:
       - CUDA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
 
   worker-kokoro:
+    runtime: nvidia
     deploy:
       resources:
         reservations:
@@ -36,6 +38,7 @@ services:
       - CUDA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
 
   worker-fish:
+    runtime: nvidia
     deploy:
       resources:
         reservations:
@@ -48,6 +51,7 @@ services:
       - CUDA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
 
   worker-qwen3:
+    runtime: nvidia
     deploy:
       resources:
         reservations:
@@ -60,6 +64,7 @@ services:
       - CUDA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
 
   worker-f5:
+    runtime: nvidia
     deploy:
       resources:
         reservations:
@@ -72,6 +77,7 @@ services:
       - CUDA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
 
   worker-orpheus:
+    runtime: nvidia
     deploy:
       resources:
         reservations:
@@ -84,6 +90,7 @@ services:
       - CUDA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
 
   worker-dia:
+    runtime: nvidia
     deploy:
       resources:
         reservations:

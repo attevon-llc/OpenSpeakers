@@ -256,6 +256,7 @@
         />
       </div>
       <div>
+        <!-- svelte-ignore a11y_label_has_associated_control -->
         <label class="label">Model</label>
         <ModelSelector
           models={voiceCloningModels()}
@@ -267,6 +268,7 @@
 
     <!-- File upload — drag-and-drop zone -->
     <div>
+      <!-- svelte-ignore a11y_label_has_associated_control -->
       <label class="label">
         Reference audio
         <span class="label-hint">(WAV / MP3 / FLAC / M4A / OGG, 5-30 sec recommended)</span>
@@ -463,6 +465,7 @@
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
                 {#if editingVoiceId === voice.id}
+                  <!-- svelte-ignore a11y_autofocus -->
                   <input
                     type="text"
                     bind:value={editingName}
@@ -475,11 +478,12 @@
                     autofocus
                   />
                 {:else}
-                  <span
-                    class="font-medium text-sm text-gray-900 dark:text-gray-100 truncate cursor-pointer hover:text-primary-400 transition-colors"
+                  <button
+                    type="button"
+                    class="font-medium text-sm text-gray-900 dark:text-gray-100 truncate text-left hover:text-primary-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
                     title="Click to rename"
                     onclick={() => startEdit(voice)}
-                  >{voice.name}</span>
+                  >{voice.name}</button>
                   <button
                     onclick={() => startEdit(voice)}
                     class="text-gray-500 hover:text-primary-400 text-xs transition-colors"

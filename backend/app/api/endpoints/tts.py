@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.db.models import JobStatus, TTSJob
 from app.schemas.tts import (
@@ -27,10 +28,13 @@ from app.tasks.tts_tasks import generate_tts
 
 router = APIRouter(prefix="/tts", tags=["tts"])
 
-# Models that run on dedicated worker queues instead of the default "tts" queue
+# Celery queue routing per model. Must be explicit for every registered model —
+# the backend logs a warning at startup for any registered model without an
+# entry here. New models should be added alongside their worker container.
 QUEUE_MAP: dict[str, str] = {
-    # Dedicated queues — each maps to its own worker container
     "kokoro": "tts.kokoro",  # always-on standby; dedicated so it never waits behind VibeVoice
+    "vibevoice": "tts",  # main worker
+    "vibevoice-1.5b": "tts",  # main worker
     "fish-speech-s2": "tts.fish-speech",
     "qwen3-tts": "tts.qwen3",
     "orpheus-3b": "tts.orpheus",
@@ -39,10 +43,6 @@ QUEUE_MAP: dict[str, str] = {
     "cosyvoice-2": "tts.f5-tts",
     "parler-tts": "tts.f5-tts",
     "dia-1b": "tts.dia",
-    # Future models
-    "xtts-v2": "tts.xtts",
-    "bark": "tts.bark",
-    # Default (no entry) → "tts" queue → main worker (VibeVoice 0.5B / 1.5B)
 }
 
 
@@ -52,6 +52,16 @@ def create_tts_job(request: GenerateRequest, db: Session = Depends(get_db)) -> G
 
     Returns immediately with a job_id. Poll /tts/jobs/{job_id} for status.
     """
+    # Validate model_id against the registry — refusing unknown models here is
+    # cheaper and clearer than letting a Celery worker fail the job later.
+    from app.models.manager import ModelManager
+
+    if request.model_id not in ModelManager.get_instance().registered_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown model_id: {request.model_id}",
+        )
+
     # Create job record
     job = TTSJob(
         model_id=request.model_id,
@@ -197,20 +207,48 @@ def batch_generate(
 
 
 @router.get("/batches/{batch_id}", response_model=BatchStatusResponse)
-def get_batch(batch_id: uuid.UUID, db: Session = Depends(get_db)) -> BatchStatusResponse:
-    """Get the status of all jobs in a batch."""
-    jobs = db.query(TTSJob).filter(TTSJob.batch_id == batch_id).all()
-    if not jobs:
+def get_batch(
+    batch_id: uuid.UUID,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> BatchStatusResponse:
+    """Get the status of all jobs in a batch.
+
+    Returns ``status_counts`` (always the full aggregate across the batch) plus a
+    paginated ``jobs`` list. Default page size of 100 matches the batch submission
+    cap, so a single call is sufficient for ordinary use.
+    """
+    from sqlalchemy import func
+
+    # Aggregate counts in the DB — avoids loading every row just to count statuses.
+    rows = (
+        db.query(TTSJob.status, func.count(TTSJob.id))
+        .filter(TTSJob.batch_id == batch_id)
+        .group_by(TTSJob.status)
+        .all()
+    )
+    if not rows:
         raise HTTPException(status_code=404, detail="Batch not found")
 
-    status_counts: dict[str, int] = {}
-    for job in jobs:
-        key = job.status.value
-        status_counts[key] = status_counts.get(key, 0) + 1
+    status_counts: dict[str, int] = {status.value: count for status, count in rows}
+    total = sum(status_counts.values())
+
+    # Paginate the jobs list — ordered by created_at so the first page is
+    # deterministic (the submission order).
+    offset = (page - 1) * page_size
+    jobs = (
+        db.query(TTSJob)
+        .filter(TTSJob.batch_id == batch_id)
+        .order_by(TTSJob.created_at.asc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
 
     return BatchStatusResponse(
         batch_id=batch_id,
-        total=len(jobs),
+        total=total,
         status_counts=status_counts,
         jobs=[JobResponse.model_validate(j) for j in jobs],
     )
@@ -227,12 +265,23 @@ def get_batch_zip(batch_id: uuid.UUID, db: Session = Depends(get_db)) -> Streami
     if not jobs:
         raise HTTPException(status_code=404, detail="No completed jobs found in batch")
 
+    # Only include files that live under the configured audio output dir — defence in
+    # depth against any future code path that sets output_path from untrusted input.
+    audio_root = Path(settings.AUDIO_OUTPUT_DIR).resolve()
+
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for i, job in enumerate(jobs, 1):
-            if job.output_path and Path(job.output_path).exists():
-                ext = Path(job.output_path).suffix
-                zf.write(job.output_path, arcname=f"{i:03d}_{job.id}{ext}")
+            if not job.output_path:
+                continue
+            output_path = Path(job.output_path).resolve()
+            try:
+                output_path.relative_to(audio_root)
+            except ValueError:
+                continue  # path escapes the audio dir — skip
+            if not output_path.exists():
+                continue
+            zf.write(output_path, arcname=f"{i:03d}_{job.id}{output_path.suffix}")
     zip_buf.seek(0)
 
     return StreamingResponse(

@@ -52,9 +52,9 @@
     return Math.round((systemInfo.gpu.vram_used_gb / systemInfo.gpu.vram_total_gb) * 100);
   });
 
-  let gpuUtilPct = $derived(systemInfo?.gpu.nvidia_smi?.utilization_pct ?? 0);
+  let gpuUtilPct = $derived.by(() => systemInfo?.gpu.nvidia_smi?.utilization_pct ?? 0);
 
-  let temperature = $derived(systemInfo?.gpu.nvidia_smi?.temperature_c ?? null);
+  let temperature = $derived.by(() => systemInfo?.gpu.nvidia_smi?.temperature_c ?? null);
 
   let tempColor = $derived.by(() => {
     if (temperature === null) return '';
@@ -218,6 +218,7 @@
             type="button"
             role="switch"
             aria-checked={autoRefresh}
+            aria-label="Toggle live GPU stats"
             onclick={() => (autoRefresh = !autoRefresh)}
             onkeydown={handleSwitchKeydown}
             class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200

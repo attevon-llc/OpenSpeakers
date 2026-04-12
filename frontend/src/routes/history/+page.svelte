@@ -1,8 +1,8 @@
 <!-- Job History Page -->
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { listJobs, getAudioUrl, cancelJob } from '$lib/api/tts';
-  import { models } from '$lib/stores/models';
+  import { listJobs, getAudioUrl, cancelJob, type JobStatus } from '$api/tts';
+  import { models } from '$stores/models';
   import AudioPlayer from '$components/AudioPlayer.svelte';
   import { addToast } from '$lib/stores/toasts';
 
@@ -49,11 +49,11 @@
   async function load() {
     loading = true;
     try {
-      const params: Parameters<typeof listJobs>[0] = {
+      const params: NonNullable<Parameters<typeof listJobs>[0]> = {
         page,
         page_size: PAGE_SIZE,
       };
-      if (statusFilter !== 'all') params.status = statusFilter as Parameters<typeof listJobs>[0]['status'];
+      if (statusFilter !== 'all') params.status = statusFilter as JobStatus;
       if (modelFilter !== 'all') params.model_id = modelFilter;
       if (searchQuery) params.search = searchQuery;
 
@@ -170,12 +170,14 @@
               {job.model_id}
             </span>
 
-            <!-- Text -->
-            <span
-              class="flex-1 text-sm text-gray-300 truncate cursor-pointer hover:text-white"
+            <!-- Text (clickable to expand) -->
+            <button
+              type="button"
+              class="flex-1 min-w-0 text-left text-sm text-gray-300 truncate hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
               onclick={() => expandedJobId = expandedJobId === job.id ? null : job.id}
               title={job.text}
-            >{truncateText(job.text)}</span>
+              aria-expanded={expandedJobId === job.id}
+            >{truncateText(job.text)}</button>
 
             <!-- Status badge -->
             <span class="text-xs px-2 py-0.5 rounded border shrink-0 {STATUS_COLORS[job.status] ?? 'bg-gray-700/50 text-gray-400 border-gray-600'}">

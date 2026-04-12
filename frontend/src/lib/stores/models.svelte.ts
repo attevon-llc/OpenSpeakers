@@ -18,15 +18,24 @@ export function voiceCloningModels(): ModelInfo[] {
   return models.filter((m) => m.supports_voice_cloning);
 }
 
-export async function refreshModels(): Promise<void> {
-  _loading = true;
-  _error = null;
-  try {
-    const list = await listModels();
-    models.splice(0, Infinity, ...list);
-  } catch (err) {
-    _error = err instanceof Error ? err.message : 'Failed to load models';
-  } finally {
-    _loading = false;
-  }
+// Dedupe concurrent calls — multiple components calling refreshModels at the same time
+// share a single in-flight request instead of racing.
+let _pending: Promise<void> | null = null;
+
+export function refreshModels(): Promise<void> {
+  if (_pending) return _pending;
+  _pending = (async () => {
+    _loading = true;
+    _error = null;
+    try {
+      const list = await listModels();
+      models.splice(0, Infinity, ...list);
+    } catch (err) {
+      _error = err instanceof Error ? err.message : 'Failed to load models';
+    } finally {
+      _loading = false;
+      _pending = null;
+    }
+  })();
+  return _pending;
 }

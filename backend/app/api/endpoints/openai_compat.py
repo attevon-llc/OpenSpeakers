@@ -12,6 +12,8 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -22,6 +24,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.db.models import JobStatus, TTSJob
 from app.tasks.tts_tasks import generate_tts
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["openai-compat"])
 
@@ -108,7 +112,7 @@ class OpenAISpeechRequest(BaseModel):
 
 
 @router.post("/v1/audio/speech")
-def openai_speech(req: OpenAISpeechRequest, db: Session = Depends(get_db)):
+async def openai_speech(req: OpenAISpeechRequest, db: Session = Depends(get_db)):
     """OpenAI-compatible TTS endpoint. Blocks until audio is ready."""
     # Resolve model
     model_id = MODEL_MAP.get(req.model, req.model)
@@ -154,15 +158,18 @@ def openai_speech(req: OpenAISpeechRequest, db: Session = Depends(get_db)):
     queue = QUEUE_MAP.get(model_id, "tts")
     generate_tts.apply_async(args=[str(job.id)], queue=queue)
 
-    # Poll synchronously until done (max 5 minutes)
+    # Poll asynchronously until done (max 5 minutes). Uses asyncio.sleep so we don't
+    # block the FastAPI event loop — other requests can be served during the wait.
     deadline = time.monotonic() + 300
     while time.monotonic() < deadline:
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
         db.refresh(job)
         if job.status == JobStatus.COMPLETE:
             break
         if job.status in (JobStatus.FAILED, JobStatus.CANCELLED):
-            raise HTTPException(500, detail=job.error_message or "Generation failed")
+            # Log full error server-side, return a sanitised message to the client.
+            logger.warning("OpenAI-compat job %s failed: %s", job.id, job.error_message)
+            raise HTTPException(500, detail="Speech generation failed")
 
     if job.status != JobStatus.COMPLETE:
         raise HTTPException(504, detail="Generation timed out")

@@ -1,6 +1,6 @@
 <script lang="ts">
   let { message = '', onRetry, onDismiss }: {
-    message: string;
+    message: string | null | undefined;
     onRetry?: () => void;
     onDismiss?: () => void;
   } = $props();

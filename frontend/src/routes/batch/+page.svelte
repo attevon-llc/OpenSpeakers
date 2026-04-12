@@ -132,11 +132,11 @@
       <!-- Text input area -->
       <div>
         <div class="flex items-center justify-between mb-2">
-          <label class="text-sm font-medium text-gray-300">Text lines</label>
+          <label for="batch-text" class="text-sm font-medium text-gray-300">Text lines</label>
           <div class="flex items-center gap-3">
             <span class="text-xs text-gray-500">{lines.length} line{lines.length !== 1 ? 's' : ''}</span>
             <button
-              onclick={() => fileInputEl.click()}
+              onclick={() => fileInputEl?.click()}
               class="text-xs text-primary-400 hover:text-primary-300 transition-colors"
             >Upload .txt file</button>
             <input
@@ -149,6 +149,7 @@
           </div>
         </div>
         <textarea
+          id="batch-text"
           bind:value={textInput}
           placeholder="Enter one line of text per audio file to generate...&#10;&#10;Line 1 becomes audio file 1&#10;Line 2 becomes audio file 2&#10;(Maximum 100 lines)"
           rows={10}
@@ -160,8 +161,9 @@
       <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
         <!-- Model -->
         <div>
-          <label class="text-xs text-gray-400 mb-1 block">Model</label>
+          <label for="batch-model" class="text-xs text-gray-400 mb-1 block">Model</label>
           <select
+            id="batch-model"
             bind:value={selectedModelId}
             class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:outline-none"
           >
@@ -173,8 +175,9 @@
 
         <!-- Language -->
         <div>
-          <label class="text-xs text-gray-400 mb-1 block">Language</label>
+          <label for="batch-language" class="text-xs text-gray-400 mb-1 block">Language</label>
           <select
+            id="batch-language"
             bind:value={language}
             class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:outline-none"
           >
@@ -192,8 +195,9 @@
 
         <!-- Output format -->
         <div>
-          <label class="text-xs text-gray-400 mb-1 block">Format</label>
+          <label for="batch-format" class="text-xs text-gray-400 mb-1 block">Format</label>
           <select
+            id="batch-format"
             bind:value={outputFormat}
             class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:outline-none"
           >

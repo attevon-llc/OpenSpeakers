@@ -94,7 +94,15 @@ async def create_voice_profile(
     audio_dir = Path(settings.AUDIO_OUTPUT_DIR) / "voices"
     audio_dir.mkdir(parents=True, exist_ok=True)
 
-    ext = Path(reference_audio.filename or "ref.wav").suffix or ".wav"
+    # Whitelist extensions. The filename is user-controlled — taking only the
+    # suffix via Path() and checking it against a known list means we can't
+    # accidentally write an .exe or hit a case-difference issue in downstream
+    # tools. The stored filename uses a generated UUID so the original basename
+    # never reaches disk.
+    ALLOWED_EXTS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".mp4", ".webm"}
+    ext = Path(reference_audio.filename or "ref.wav").suffix.lower()
+    if not ext or ext not in ALLOWED_EXTS:
+        ext = ".wav"
     ref_path = audio_dir / f"{voice_id}{ext}"
 
     with ref_path.open("wb") as f:

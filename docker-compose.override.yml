@@ -4,6 +4,7 @@
 
 services:
   backend:
+    runtime: nvidia
     image: open_speakers-backend:latest
     build:
       context: ./backend
@@ -11,9 +12,13 @@ services:
     volumes:
       - ./backend:/app
       - ${AUDIO_OUTPUT_DIR:-./audio_output}:/app/audio_output
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${GPU_DEVICE_ID:-0}
+      - NVIDIA_DRIVER_CAPABILITIES=utility
     command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 
   worker:
+    runtime: nvidia
     image: open_speakers-worker:latest
     build:
       context: ./backend
@@ -45,6 +50,7 @@ services:
       - HF_HUB_OFFLINE=1
 
   worker-kokoro:
+    runtime: nvidia
     image: open_speakers-worker:latest
     build:
       context: ./backend
@@ -72,6 +78,7 @@ services:
       --hostname kokoro-worker@%h -E
 
   worker-fish:
+    runtime: nvidia
     image: open_speakers-worker-fish:latest
     build:
       context: ./backend
@@ -100,6 +107,7 @@ services:
       --hostname fish-worker@%h -E
 
   worker-qwen3:
+    runtime: nvidia
     image: open_speakers-worker-qwen3:latest
     build:
       context: ./backend
@@ -126,6 +134,7 @@ services:
       --hostname qwen3-worker@%h -E
 
   worker-f5:
+    runtime: nvidia
     image: open_speakers-worker-f5:latest
     build:
       context: ./backend
@@ -151,6 +160,7 @@ services:
       --hostname f5-worker@%h -E
 
   worker-orpheus:
+    runtime: nvidia
     image: open_speakers-worker-orpheus:latest
     build:
       context: ./backend
@@ -180,6 +190,7 @@ services:
       --hostname orpheus-worker@%h -E
 
   worker-dia:
+    runtime: nvidia
     image: open_speakers-worker-dia:latest
     build:
       context: ./backend

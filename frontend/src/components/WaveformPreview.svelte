@@ -10,6 +10,7 @@
 
   onMount(async () => {
     const { default: WaveSurfer } = await import('wavesurfer.js');
+    if (!container) return;
     ws = WaveSurfer.create({
       container,
       waveColor: theme() === 'dark' ? '#0369a1' : '#7dd3fc',

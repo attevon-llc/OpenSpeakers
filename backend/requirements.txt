@@ -26,6 +26,7 @@ numpy>=1.26.0
 
 # Utilities
 python-dotenv>=1.0.0
+nvidia-ml-py>=12.0.0  # GPU stats without torch (NVML wrapper)
 
 # Testing
 pytest>=8.0.0
